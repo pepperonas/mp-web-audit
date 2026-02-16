@@ -3,7 +3,7 @@
 [![CI](https://github.com/pepperonas/mp-web-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/pepperonas/mp-web-audit/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.11-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)](https://github.com/pepperonas/mp-web-audit)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/pepperonas/mp-web-audit)
 
 CLI-basiertes Web-Auditing-Framework fuer genehmigte Sicherheitspruefungen.
 
@@ -103,7 +103,7 @@ Nach der Aktivierung erscheint `(.venv)` im Terminal-Prompt. Der Befehl `webaudi
 
 ```bash
 (.venv) $ webaudit --version
-mp-web-audit v0.0.1
+mp-web-audit v0.1.0
 ```
 
 Zum Deaktivieren:
@@ -171,7 +171,7 @@ webaudit report reports/audit_example.com_20260216.json
 ### Beispiel-Ausgabe
 
 ```
-mp-web-audit v0.0.1
+mp-web-audit v0.1.0
 
 Lade Ziel: https://example.com/
 Geladen: Status 200, 1256 Bytes, 85ms TTFB
@@ -302,7 +302,7 @@ webaudit scan https://example.com --weights '{"Sicherheit": 0.6, "Performance": 
 |--------|-------------|---------|
 | `-t, --timeout FLOAT` | HTTP-Timeout in Sekunden | `10.0` |
 | `--rate-limit INT` | Max. Requests pro Sekunde | `10` |
-| `--user-agent TEXT` | Custom User-Agent | `mp-web-audit/0.0.1` |
+| `--user-agent TEXT` | Custom User-Agent | `mp-web-audit/0.1.0` |
 | `--no-verify-ssl` | SSL-Verifizierung deaktivieren | - |
 
 ### Scanner-Konfiguration
@@ -387,7 +387,7 @@ Strukturierte Datenexporte fuer Weiterverarbeitung und CI/CD-Pipelines:
     "Performance": 82.0
   },
   "metadata": {
-    "tool_version": "0.0.1",
+    "tool_version": "0.1.0",
     "python_version": "3.11.8",
     "scan_config": {
       "categories": ["web", "security", "techstack", "discovery"],

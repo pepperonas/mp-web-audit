@@ -15,7 +15,7 @@ class ScanConfig:
     formats: list[str] = field(default_factory=lambda: ["html", "json", "terminal"])
     timeout: float = 10.0
     rate_limit: int = 10
-    user_agent: str = "mp-web-audit/0.0.1"
+    user_agent: str = "mp-web-audit/0.1.0"
     verify_ssl: bool = True
     skip_ssl: bool = False
     skip_ports: bool = False

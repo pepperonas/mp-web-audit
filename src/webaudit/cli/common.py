@@ -43,7 +43,7 @@ def build_config(
         formats=[f.strip() for f in formats.split(",")],
         timeout=timeout,
         rate_limit=rate_limit,
-        user_agent=user_agent or "mp-web-audit/0.0.1",
+        user_agent=user_agent or "mp-web-audit/0.1.0",
         verify_ssl=not no_verify_ssl,
         skip_ssl=skip_ssl,
         skip_ports=skip_ports,
