@@ -101,7 +101,10 @@ async def run_audit(
     target_url = normalize_url(config.target_url)
     config.target_url = target_url
 
-    report = AuditReport(target_url=target_url)
+    # IP-Adresse resolven
+    target_ip = _resolve_ip(target_url)
+
+    report = AuditReport(target_url=target_url, target_ip=target_ip)
     if autorisierung_zeit:
         report.autorisierung = AutorisierungInfo(
             bestaetigt=True,
@@ -115,7 +118,8 @@ async def run_audit(
     async with create_http_client(config) as http:
         # Initiale Anfrage mit Fallback-Strategien
         if not config.quiet:
-            console.print(f"\n[cyan]Lade Ziel:[/cyan] {target_url}")
+            ip_info = f" [dim]({target_ip})[/dim]" if target_ip else ""
+            console.print(f"\n[cyan]Lade Ziel:[/cyan] {target_url}{ip_info}")
 
         resp = await _try_connect(target_url, http, config, console)
 
@@ -224,6 +228,17 @@ async def run_audit(
         generate_reports(report, config, console if not config.quiet else Console(quiet=True))
 
     return report
+
+
+def _resolve_ip(target_url: str) -> str:
+    """Loest den Hostnamen der Ziel-URL zu einer IP-Adresse auf."""
+    import socket
+
+    hostname = urlparse(target_url).hostname or ""
+    try:
+        return socket.gethostbyname(hostname)
+    except socket.gaierror:
+        return ""
 
 
 async def _try_connect(

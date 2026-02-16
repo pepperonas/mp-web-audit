@@ -87,6 +87,7 @@ class AuditReport(BaseModel):
     """Kompletter Audit-Report."""
 
     target_url: str
+    target_ip: str = ""
     zeitstempel: datetime = Field(default_factory=datetime.now)
     dauer: float = 0.0
     results: list[ScanResult] = Field(default_factory=list)

@@ -13,7 +13,7 @@
     <div class="header">
         <h1>Web-Audit Report</h1>
         <div class="meta">
-            Ziel: <strong>{{ report.target_url }}</strong><br>
+            Ziel: <strong>{{ report.target_url }}</strong>{% if report.target_ip %} <span style="color:#888">({{ report.target_ip }})</span>{% endif %}<br>
             Zeitpunkt: {{ report.zeitstempel.strftime('%d.%m.%Y %H:%M:%S') }}<br>
             Dauer: {{ "%.1f"|format(report.dauer) }}s
             {% if report.autorisierung %}
