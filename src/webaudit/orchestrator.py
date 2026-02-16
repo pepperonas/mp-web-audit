@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 
+import httpx
 from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -111,14 +113,13 @@ async def run_audit(
     start_time = time.monotonic()
 
     async with create_http_client(config) as http:
-        # Initiale Anfrage
+        # Initiale Anfrage mit Fallback-Strategien
         if not config.quiet:
             console.print(f"\n[cyan]Lade Ziel:[/cyan] {target_url}")
 
-        context = None
-        try:
-            resp = await http.get(target_url)
+        resp = await _try_connect(target_url, http, config, console)
 
+        if resp is not None:
             # ScanContext bauen
             redirects = [str(r.url) for r in resp.history] if resp.history else []
             soup = BeautifulSoup(resp.text, "lxml")
@@ -145,13 +146,11 @@ async def run_audit(
                     f"{len(resp.text)} Bytes, "
                     f"{context.response_time * 1000:.0f}ms TTFB"
                 )
-        except Exception as e:
+        else:
             if not config.quiet:
                 console.print(
-                    f"[yellow]Ziel nicht erreichbar:[/yellow] {e}\n"
-                    f"[yellow]Fuehre netzwerk-unabhaengige Scanner trotzdem aus...[/yellow]"
+                    "[yellow]Fuehre netzwerk-unabhaengige Scanner trotzdem aus...[/yellow]"
                 )
-            # Minimaler Context fuer Scanner die ohne HTTP-Response arbeiten
             context = ScanContext(
                 target_url=target_url,
                 status_code=0,
@@ -225,6 +224,94 @@ async def run_audit(
         generate_reports(report, config, console if not config.quiet else Console(quiet=True))
 
     return report
+
+
+async def _try_connect(
+    target_url: str,
+    http,
+    config: ScanConfig,
+    console: Console,
+) -> httpx.Response | None:
+    """Versucht verschiedene Verbindungsstrategien zum Ziel."""
+    parsed = urlparse(target_url)
+    hostname = parsed.hostname or ""
+
+    # Strategie 1: Original-URL
+    try:
+        return await http.get(target_url)
+    except Exception:
+        pass
+
+    # Strategie 2: SSL-Verifizierung deaktivieren (self-signed certs)
+    if parsed.scheme == "https" and config.verify_ssl:
+        if not config.quiet:
+            console.print("[dim]  Versuche ohne SSL-Verifizierung...[/dim]")
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(config.timeout),
+                follow_redirects=True,
+                verify=False,
+                headers={"User-Agent": config.user_agent},
+            ) as client:
+                resp = await client.get(target_url)
+                if not config.quiet:
+                    console.print(
+                        "[yellow]  Verbindung nur ohne SSL-Verifizierung moeglich.[/yellow]"
+                    )
+                return resp
+        except Exception:
+            pass
+
+    # Strategie 3: Anderes Protokoll (https->http oder http->https)
+    if parsed.scheme == "https":
+        alt_url = target_url.replace("https://", "http://", 1)
+    else:
+        alt_url = target_url.replace("http://", "https://", 1)
+    if not config.quiet:
+        console.print(f"[dim]  Versuche {alt_url}...[/dim]")
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(config.timeout),
+            follow_redirects=True,
+            verify=False,
+            headers={"User-Agent": config.user_agent},
+        ) as client:
+            resp = await client.get(alt_url)
+            if not config.quiet:
+                console.print(f"[yellow]  Erreichbar ueber {alt_url}[/yellow]")
+            return resp
+    except Exception:
+        pass
+
+    # Strategie 4: Alternative Ports (8080, 8443)
+    alt_ports = [8443, 8080] if parsed.scheme == "https" else [8080, 8443]
+    for port in alt_ports:
+        alt = f"{parsed.scheme}://{hostname}:{port}{parsed.path or '/'}"
+        if not config.quiet:
+            console.print(f"[dim]  Versuche Port {port}...[/dim]")
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(config.timeout),
+                follow_redirects=True,
+                verify=False,
+                headers={"User-Agent": config.user_agent},
+            ) as client:
+                resp = await client.get(alt)
+                if not config.quiet:
+                    console.print(f"[yellow]  Erreichbar ueber Port {port}[/yellow]")
+                return resp
+        except Exception:
+            pass
+
+    # Alle Strategien fehlgeschlagen
+    if not config.quiet:
+        console.print(
+            f"[red]Ziel nicht erreichbar:[/red] {hostname} antwortet auf keinem Port "
+            f"(80, 443, 8080, 8443).\n"
+            f"[red]Moeglich:[/red] Server offline, Firewall blockiert, DNS falsch "
+            f"(IP: {parsed.hostname})"
+        )
+    return None
 
 
 def _filter_scanners(registry: dict, config: ScanConfig) -> dict:
