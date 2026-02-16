@@ -25,6 +25,9 @@ from webaudit.core.utils import normalize_url, timer
 from webaudit.reporting.engine import generate_reports
 from webaudit.scanners import discover_scanners, get_scanner_registry
 
+# Scanner die ohne initiale HTTP-Response arbeiten koennen
+NO_HTTP_SCANNERS = {"dns", "ports", "redirect"}
+
 
 async def _run_scanner(
     scanner_cls: type,
@@ -111,45 +114,66 @@ async def run_audit(
         # Initiale Anfrage
         if not config.quiet:
             console.print(f"\n[cyan]Lade Ziel:[/cyan] {target_url}")
+
+        context = None
         try:
             resp = await http.get(target_url)
+
+            # ScanContext bauen
+            redirects = [str(r.url) for r in resp.history] if resp.history else []
+            soup = BeautifulSoup(resp.text, "lxml")
+
+            cookies_dict = {}
+            for name, value in resp.cookies.items():
+                cookies_dict[name] = value
+
+            context = ScanContext(
+                target_url=target_url,
+                final_url=str(resp.url),
+                status_code=resp.status_code,
+                headers={k: v for k, v in resp.headers.items()},
+                body=resp.text,
+                soup=soup,
+                redirects=redirects,
+                response_time=resp.elapsed.total_seconds() if resp.elapsed else 0,
+                cookies=cookies_dict,
+            )
+
+            if not config.quiet:
+                console.print(
+                    f"[green]Geladen:[/green] Status {resp.status_code}, "
+                    f"{len(resp.text)} Bytes, "
+                    f"{context.response_time * 1000:.0f}ms TTFB"
+                )
         except Exception as e:
             if not config.quiet:
-                console.print(f"[red]Fehler beim Laden der Ziel-URL:[/red] {e}")
-            report.dauer = round(time.monotonic() - start_time, 1)
-            return report
-
-        # ScanContext bauen
-        redirects = [str(r.url) for r in resp.history] if resp.history else []
-        soup = BeautifulSoup(resp.text, "lxml")
-
-        # Cookies extrahieren
-        cookies_dict = {}
-        for name, value in resp.cookies.items():
-            cookies_dict[name] = value
-
-        context = ScanContext(
-            target_url=target_url,
-            final_url=str(resp.url),
-            status_code=resp.status_code,
-            headers={k: v for k, v in resp.headers.items()},
-            body=resp.text,
-            soup=soup,
-            redirects=redirects,
-            response_time=resp.elapsed.total_seconds() if resp.elapsed else 0,
-            cookies=cookies_dict,
-        )
-
-        if not config.quiet:
-            console.print(
-                f"[green]Geladen:[/green] Status {resp.status_code}, "
-                f"{len(resp.text)} Bytes, "
-                f"{context.response_time * 1000:.0f}ms TTFB"
+                console.print(
+                    f"[yellow]Ziel nicht erreichbar:[/yellow] {e}\n"
+                    f"[yellow]Fuehre netzwerk-unabhaengige Scanner trotzdem aus...[/yellow]"
+                )
+            # Minimaler Context fuer Scanner die ohne HTTP-Response arbeiten
+            context = ScanContext(
+                target_url=target_url,
+                status_code=0,
+                headers={},
+                body="",
             )
 
         # Scanner filtern und ausfuehren
         registry = get_scanner_registry()
         scanners_to_run = _filter_scanners(registry, config)
+
+        # Bei fehlendem HTTP-Response nur netzwerk-unabhaengige Scanner laufen lassen
+        if context.status_code == 0:
+            http_dependent = {
+                name: cls for name, cls in scanners_to_run.items() if name not in NO_HTTP_SCANNERS
+            }
+            skipped_names = list(http_dependent.keys())
+            scanners_to_run = {
+                name: cls for name, cls in scanners_to_run.items() if name in NO_HTTP_SCANNERS
+            }
+            if skipped_names and not config.quiet:
+                console.print(f"[dim]Uebersprungen (kein HTTP): {', '.join(skipped_names)}[/dim]")
 
         if not config.quiet:
             console.print(f"\n[cyan]Starte {len(scanners_to_run)} Scanner...[/cyan]\n")
