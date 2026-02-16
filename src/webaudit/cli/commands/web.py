@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -23,15 +22,19 @@ def web_cmd(
     timeout: float = typer.Option(10.0, "-t", "--timeout", help="HTTP-Timeout in Sekunden"),
     rate_limit: int = typer.Option(10, "--rate-limit", help="Max. Requests pro Sekunde"),
     user_agent: Optional[str] = typer.Option(None, "--user-agent", help="Custom User-Agent"),
-    no_verify_ssl: bool = typer.Option(False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"),
+    no_verify_ssl: bool = typer.Option(
+        False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Ausfuehrliche Ausgabe"),
 ) -> None:
     """Fuehrt nur Web-Checks durch (Performance, SEO, Mobile, Usability)."""
-    console.print(Panel(
-        f"[cyan]Web-Audit[/cyan] fuer: [bold]{url}[/bold]\n"
-        "Scanner: Performance, SEO, Mobile, Usability",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[cyan]Web-Audit[/cyan] fuer: [bold]{url}[/bold]\n"
+            "Scanner: Performance, SEO, Mobile, Usability",
+            border_style="blue",
+        )
+    )
 
     config = ScanConfig(
         target_url=url,
@@ -46,4 +49,5 @@ def web_cmd(
     )
 
     from webaudit.orchestrator import run_audit
+
     asyncio.run(run_audit(config, scan_typ="Web-Checks", console=console))

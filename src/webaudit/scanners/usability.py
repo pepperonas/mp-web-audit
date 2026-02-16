@@ -31,8 +31,10 @@ class UsabilityScanner(BaseScanner):
 
         if not soup:
             return ScanResult(
-                scanner_name=self.name, kategorie="Usability",
-                findings=findings, raw_data=raw,
+                scanner_name=self.name,
+                kategorie="Usability",
+                findings=findings,
+                raw_data=raw,
             )
 
         # Alt-Tags bei Bildern
@@ -41,16 +43,19 @@ class UsabilityScanner(BaseScanner):
         imgs_without_alt = [img for img in images if not img.get("alt")]
         raw["images_without_alt"] = len(imgs_without_alt)
         if imgs_without_alt:
-            findings.append(Finding(
-                scanner=self.name, kategorie="Usability",
-                titel=f"{len(imgs_without_alt)} Bild(er) ohne Alt-Text",
-                severity=Severity.MITTEL,
-                beschreibung=f"Von {len(images)} Bildern haben {len(imgs_without_alt)} keinen Alt-Text.",
-                beweis=", ".join(
-                    img.get("src", "unbekannt")[:80] for img in imgs_without_alt[:5]
-                ),
-                empfehlung="Alle Bilder mit beschreibenden Alt-Texten versehen.",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Usability",
+                    titel=f"{len(imgs_without_alt)} Bild(er) ohne Alt-Text",
+                    severity=Severity.MITTEL,
+                    beschreibung=f"Von {len(images)} Bildern haben {len(imgs_without_alt)} keinen Alt-Text.",
+                    beweis=", ".join(
+                        img.get("src", "unbekannt")[:80] for img in imgs_without_alt[:5]
+                    ),
+                    empfehlung="Alle Bilder mit beschreibenden Alt-Texten versehen.",
+                )
+            )
 
         # Broken Links (stichprobenartig, max. 20 interne Links)
         links = soup.find_all("a", href=True)
@@ -75,14 +80,17 @@ class UsabilityScanner(BaseScanner):
 
         raw["broken_links"] = len(broken)
         if broken:
-            findings.append(Finding(
-                scanner=self.name, kategorie="Usability",
-                titel=f"{len(broken)} defekte(r) Link(s) gefunden",
-                severity=Severity.MITTEL,
-                beschreibung=f"Von {len(internal_links[:20])} geprüften internen Links sind {len(broken)} defekt.",
-                beweis="\n".join(broken[:10]),
-                empfehlung="Defekte Links reparieren oder entfernen.",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Usability",
+                    titel=f"{len(broken)} defekte(r) Link(s) gefunden",
+                    severity=Severity.MITTEL,
+                    beschreibung=f"Von {len(internal_links[:20])} geprüften internen Links sind {len(broken)} defekt.",
+                    beweis="\n".join(broken[:10]),
+                    empfehlung="Defekte Links reparieren oder entfernen.",
+                )
+            )
 
         # Formulare: Labels und ARIA
         forms = soup.find_all("form")
@@ -96,22 +104,28 @@ class UsabilityScanner(BaseScanner):
                 inp_id = inp.get("id", "")
                 has_label = bool(inp_id and form.find("label", attrs={"for": inp_id}))
                 has_aria = bool(inp.get("aria-label") or inp.get("aria-labelledby"))
-                has_placeholder = bool(inp.get("placeholder"))
                 if not (has_label or has_aria):
                     forms_issues += 1
 
         raw["forms_without_labels"] = forms_issues
         if forms_issues:
-            findings.append(Finding(
-                scanner=self.name, kategorie="Usability",
-                titel=f"{forms_issues} Formularfeld(er) ohne Label",
-                severity=Severity.MITTEL,
-                beschreibung=f"{forms_issues} Eingabefeld(er) haben weder ein <label> noch aria-label.",
-                empfehlung="Alle Formularfelder mit Labels oder ARIA-Attributen versehen.",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Usability",
+                    titel=f"{forms_issues} Formularfeld(er) ohne Label",
+                    severity=Severity.MITTEL,
+                    beschreibung=f"{forms_issues} Eingabefeld(er) haben weder ein <label> noch aria-label.",
+                    empfehlung="Alle Formularfelder mit Labels oder ARIA-Attributen versehen.",
+                )
+            )
 
         # Sprungmarken / Skip-Navigation
-        skip_link = soup.find("a", href="#main") or soup.find("a", href="#content") or soup.find("a", class_=lambda c: c and "skip" in c.lower() if c else False)
+        skip_link = (
+            soup.find("a", href="#main")
+            or soup.find("a", href="#content")
+            or soup.find("a", class_=lambda c: c and "skip" in c.lower() if c else False)
+        )
         raw["has_skip_link"] = skip_link is not None
 
         return ScanResult(

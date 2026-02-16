@@ -2,7 +2,7 @@
 
 import pytest
 
-from webaudit.core.models import ScanContext, Severity
+from webaudit.core.models import ScanContext
 from webaudit.scanners.cookies import CookiesScanner
 
 

@@ -21,9 +21,13 @@ BAD_HTML = "<html><head></head><body><p>Kein Title, keine Meta</p></body></html>
 
 @pytest.mark.asyncio
 async def test_good_seo(scan_config):
-    mock = type("M", (), {
-        "get": staticmethod(lambda *a, **k: _mock_resp(200, "ok")),
-    })()
+    mock = type(
+        "M",
+        (),
+        {
+            "get": staticmethod(lambda *a, **k: _mock_resp(200, "ok")),
+        },
+    )()
     context = ScanContext(
         target_url="https://example.com",
         status_code=200,
@@ -44,9 +48,13 @@ async def test_good_seo(scan_config):
 
 @pytest.mark.asyncio
 async def test_bad_seo(scan_config):
-    mock = type("M", (), {
-        "get": staticmethod(lambda *a, **k: _mock_resp(404, "")),
-    })()
+    mock = type(
+        "M",
+        (),
+        {
+            "get": staticmethod(lambda *a, **k: _mock_resp(404, "")),
+        },
+    )()
     context = ScanContext(
         target_url="https://example.com",
         status_code=200,
@@ -71,4 +79,5 @@ class _mock_resp:
     def __await__(self):
         async def _inner():
             return self
+
         return _inner().__await__()

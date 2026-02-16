@@ -28,7 +28,8 @@ async def test_detects_react(scan_config, mock_http):
     html = '<html><head></head><body><div id="__next"><script src="/_next/static/chunk.js"></script></div></body></html>'
     context = ScanContext(
         target_url="https://example.com",
-        status_code=200, headers={},
+        status_code=200,
+        headers={},
         body=html,
         soup=BeautifulSoup(html, "lxml"),
     )
@@ -43,7 +44,8 @@ async def test_detects_wordpress(scan_config, mock_http):
     html = '<html><head><meta name="generator" content="WordPress 6.4"></head><body><link href="/wp-content/style.css"></body></html>'
     context = ScanContext(
         target_url="https://example.com",
-        status_code=200, headers={},
+        status_code=200,
+        headers={},
         body=html,
         soup=BeautifulSoup(html, "lxml"),
         cookies={"wordpress_logged_in": "xyz"},

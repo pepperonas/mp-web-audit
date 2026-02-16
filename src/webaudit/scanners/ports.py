@@ -45,13 +45,13 @@ class PortsScanner(BaseScanner):
         hostname = extract_domain(context.target_url).split(":")[0]
 
         try:
-            open_ports, raw = await asyncio.to_thread(
-                self._run_nmap, hostname
-            )
+            open_ports, raw = await asyncio.to_thread(self._run_nmap, hostname)
         except Exception as e:
             return ScanResult(
-                scanner_name=self.name, kategorie="Sicherheit",
-                success=False, error=f"nmap Fehler: {e}",
+                scanner_name=self.name,
+                kategorie="Sicherheit",
+                success=False,
+                error=f"nmap Fehler: {e}",
             )
 
         # Risiko-Ports bewerten
@@ -60,37 +60,48 @@ class PortsScanner(BaseScanner):
             service = port_info.get("service", "unbekannt")
 
             if port_num in RISKY_PORTS:
-                findings.append(Finding(
-                    scanner=self.name, kategorie="Sicherheit",
-                    titel=f"Riskanter Port offen: {port_num} ({RISKY_PORTS[port_num]})",
-                    severity=Severity.HOCH,
-                    beschreibung=f"Port {port_num} ({RISKY_PORTS[port_num]}) ist offen. "
-                                 f"Dieser Dienst sollte nicht oeffentlich zugaenglich sein.",
-                    beweis=f"Port {port_num}/{port_info.get('protocol', 'tcp')} - {service}",
-                    empfehlung=f"Port {port_num} per Firewall blockieren oder den Dienst absichern.",
-                ))
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel=f"Riskanter Port offen: {port_num} ({RISKY_PORTS[port_num]})",
+                        severity=Severity.HOCH,
+                        beschreibung=f"Port {port_num} ({RISKY_PORTS[port_num]}) ist offen. "
+                        f"Dieser Dienst sollte nicht oeffentlich zugaenglich sein.",
+                        beweis=f"Port {port_num}/{port_info.get('protocol', 'tcp')} - {service}",
+                        empfehlung=f"Port {port_num} per Firewall blockieren oder den Dienst absichern.",
+                    )
+                )
             elif port_num not in (80, 443):
-                findings.append(Finding(
-                    scanner=self.name, kategorie="Sicherheit",
-                    titel=f"Port {port_num} offen ({service})",
-                    severity=Severity.INFO,
-                    beschreibung=f"Port {port_num} ist offen und bietet den Dienst '{service}' an.",
-                    beweis=f"Port {port_num}/{port_info.get('protocol', 'tcp')} - {service}",
-                    empfehlung="",
-                ))
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel=f"Port {port_num} offen ({service})",
+                        severity=Severity.INFO,
+                        beschreibung=f"Port {port_num} ist offen und bietet den Dienst '{service}' an.",
+                        beweis=f"Port {port_num}/{port_info.get('protocol', 'tcp')} - {service}",
+                        empfehlung="",
+                    )
+                )
 
         if not open_ports:
-            findings.append(Finding(
-                scanner=self.name, kategorie="Sicherheit",
-                titel="Keine offenen Ports gefunden",
-                severity=Severity.INFO,
-                beschreibung="Im gescannten Bereich wurden keine offenen Ports gefunden.",
-                empfehlung="",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Sicherheit",
+                    titel="Keine offenen Ports gefunden",
+                    severity=Severity.INFO,
+                    beschreibung="Im gescannten Bereich wurden keine offenen Ports gefunden.",
+                    empfehlung="",
+                )
+            )
 
         return ScanResult(
-            scanner_name=self.name, kategorie="Sicherheit",
-            findings=findings, raw_data=raw,
+            scanner_name=self.name,
+            kategorie="Sicherheit",
+            findings=findings,
+            raw_data=raw,
         )
 
     def _run_nmap(self, hostname: str) -> tuple[list[dict], dict]:
@@ -108,13 +119,15 @@ class PortsScanner(BaseScanner):
                 for port in sorted(ports):
                     port_data = nm[host][protocol][port]
                     if port_data["state"] == "open":
-                        open_ports.append({
-                            "port": port,
-                            "protocol": protocol,
-                            "service": port_data.get("name", ""),
-                            "version": port_data.get("version", ""),
-                            "product": port_data.get("product", ""),
-                        })
+                        open_ports.append(
+                            {
+                                "port": port,
+                                "protocol": protocol,
+                                "service": port_data.get("name", ""),
+                                "version": port_data.get("version", ""),
+                                "product": port_data.get("product", ""),
+                            }
+                        )
 
         raw["open_ports"] = open_ports
         raw["total_open"] = len(open_ports)

@@ -1,7 +1,5 @@
 """Tests fuer Pydantic-Datenmodelle."""
 
-from datetime import datetime
-
 from webaudit.core.models import (
     AuditReport,
     Finding,
@@ -46,8 +44,11 @@ class TestScanResult:
 
     def test_result_with_findings(self):
         f = Finding(
-            scanner="headers", kategorie="Sicherheit",
-            titel="Test", severity=Severity.INFO, beschreibung="Test",
+            scanner="headers",
+            kategorie="Sicherheit",
+            titel="Test",
+            severity=Severity.INFO,
+            beschreibung="Test",
         )
         r = ScanResult(scanner_name="headers", kategorie="Sicherheit", findings=[f])
         assert len(r.findings) == 1
@@ -55,8 +56,12 @@ class TestScanResult:
 
 class TestAuditReport:
     def test_all_findings_sorted(self):
-        f_info = Finding(scanner="a", kategorie="X", titel="Info", severity=Severity.INFO, beschreibung="")
-        f_krit = Finding(scanner="b", kategorie="Y", titel="Krit", severity=Severity.KRITISCH, beschreibung="")
+        f_info = Finding(
+            scanner="a", kategorie="X", titel="Info", severity=Severity.INFO, beschreibung=""
+        )
+        f_krit = Finding(
+            scanner="b", kategorie="Y", titel="Krit", severity=Severity.KRITISCH, beschreibung=""
+        )
         report = AuditReport(
             target_url="https://example.com",
             results=[

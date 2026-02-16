@@ -22,14 +22,18 @@ def techstack_cmd(
     timeout: float = typer.Option(10.0, "-t", "--timeout", help="HTTP-Timeout in Sekunden"),
     rate_limit: int = typer.Option(10, "--rate-limit", help="Max. Requests pro Sekunde"),
     user_agent: Optional[str] = typer.Option(None, "--user-agent", help="Custom User-Agent"),
-    no_verify_ssl: bool = typer.Option(False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"),
+    no_verify_ssl: bool = typer.Option(
+        False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Ausfuehrliche Ausgabe"),
 ) -> None:
     """Erkennt den Tech-Stack der Ziel-Website."""
-    console.print(Panel(
-        f"[cyan]Tech-Stack-Analyse[/cyan] fuer: [bold]{url}[/bold]",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[cyan]Tech-Stack-Analyse[/cyan] fuer: [bold]{url}[/bold]",
+            border_style="blue",
+        )
+    )
 
     config = ScanConfig(
         target_url=url,
@@ -44,4 +48,5 @@ def techstack_cmd(
     )
 
     from webaudit.orchestrator import run_audit
+
     asyncio.run(run_audit(config, scan_typ="Tech-Stack-Analyse", console=console))

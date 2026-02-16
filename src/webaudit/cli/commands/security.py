@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
 
 from webaudit.cli.commands.scan import _show_authorization_prompt
 from webaudit.core.config import ScanConfig
@@ -24,7 +22,9 @@ def security_cmd(
     timeout: float = typer.Option(10.0, "-t", "--timeout", help="HTTP-Timeout in Sekunden"),
     rate_limit: int = typer.Option(10, "--rate-limit", help="Max. Requests pro Sekunde"),
     user_agent: Optional[str] = typer.Option(None, "--user-agent", help="Custom User-Agent"),
-    no_verify_ssl: bool = typer.Option(False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"),
+    no_verify_ssl: bool = typer.Option(
+        False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"
+    ),
     skip_ssl: bool = typer.Option(False, "--skip-ssl", help="SSL-Scanner ueberspringen"),
     skip_ports: bool = typer.Option(False, "--skip-ports", help="Port-Scanning ueberspringen"),
     port_range: str = typer.Option("1-1000", "--port-range", help="Nmap Port-Range"),
@@ -32,7 +32,8 @@ def security_cmd(
 ) -> None:
     """Fuehrt nur Sicherheits-Checks durch."""
     auth_time = _show_authorization_prompt(
-        url, "Sicherheits-Checks",
+        url,
+        "Sicherheits-Checks",
         port_scan=not skip_ports,
         discovery=False,
     )
@@ -54,4 +55,9 @@ def security_cmd(
     )
 
     from webaudit.orchestrator import run_audit
-    asyncio.run(run_audit(config, scan_typ="Sicherheits-Checks", console=console, autorisierung_zeit=auth_time))
+
+    asyncio.run(
+        run_audit(
+            config, scan_typ="Sicherheits-Checks", console=console, autorisierung_zeit=auth_time
+        )
+    )

@@ -44,8 +44,14 @@ def _score_from_raw_data(scanner_name: str, raw_data: dict) -> float | None:
     if scanner_name == "seo":
         score = 100.0
         checks = [
-            "has_title", "has_meta_description", "has_h1", "has_canonical",
-            "has_lang", "has_og_tags", "has_robots_txt", "has_sitemap",
+            "has_title",
+            "has_meta_description",
+            "has_h1",
+            "has_canonical",
+            "has_lang",
+            "has_og_tags",
+            "has_robots_txt",
+            "has_sitemap",
         ]
         for check in checks:
             if not raw_data.get(check, False):
@@ -65,9 +71,12 @@ def _score_from_raw_data(scanner_name: str, raw_data: dict) -> float | None:
     if scanner_name == "headers":
         score = 100.0
         expected = [
-            "strict-transport-security", "content-security-policy",
-            "x-frame-options", "x-content-type-options",
-            "referrer-policy", "permissions-policy",
+            "strict-transport-security",
+            "content-security-policy",
+            "x-frame-options",
+            "x-content-type-options",
+            "referrer-policy",
+            "permissions-policy",
         ]
         present = raw_data.get("present_headers", [])
         for h in expected:

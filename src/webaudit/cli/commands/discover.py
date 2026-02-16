@@ -22,14 +22,19 @@ def discover_cmd(
     timeout: float = typer.Option(10.0, "-t", "--timeout", help="HTTP-Timeout in Sekunden"),
     rate_limit: int = typer.Option(10, "--rate-limit", help="Max. Requests pro Sekunde"),
     user_agent: Optional[str] = typer.Option(None, "--user-agent", help="Custom User-Agent"),
-    no_verify_ssl: bool = typer.Option(False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"),
+    no_verify_ssl: bool = typer.Option(
+        False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"
+    ),
     wordlist: Optional[Path] = typer.Option(None, "--wordlist", help="Eigene Wordlist"),
-    extensions: str = typer.Option("php,html,js,txt,bak", "--extensions", help="Datei-Erweiterungen"),
+    extensions: str = typer.Option(
+        "php,html,js,txt,bak", "--extensions", help="Datei-Erweiterungen"
+    ),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Ausfuehrliche Ausgabe"),
 ) -> None:
     """Fuehrt Directory-Discovery via feroxbuster durch."""
     auth_time = _show_authorization_prompt(
-        url, "Directory-Discovery",
+        url,
+        "Directory-Discovery",
         port_scan=False,
         discovery=True,
     )
@@ -49,4 +54,9 @@ def discover_cmd(
     )
 
     from webaudit.orchestrator import run_audit
-    asyncio.run(run_audit(config, scan_typ="Directory-Discovery", console=console, autorisierung_zeit=auth_time))
+
+    asyncio.run(
+        run_audit(
+            config, scan_typ="Directory-Discovery", console=console, autorisierung_zeit=auth_time
+        )
+    )

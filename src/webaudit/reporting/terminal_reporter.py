@@ -36,14 +36,16 @@ def render_terminal_report(report: AuditReport, console: Console | None = None) 
 
     # Header
     console.print()
-    console.print(Panel(
-        f"[bold]Web-Audit Report[/bold]\n"
-        f"Ziel: [cyan]{report.target_url}[/cyan]\n"
-        f"Zeitpunkt: {report.zeitstempel.strftime('%d.%m.%Y %H:%M:%S')}\n"
-        f"Dauer: {report.dauer:.1f}s",
-        title="mp-web-audit",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Web-Audit Report[/bold]\n"
+            f"Ziel: [cyan]{report.target_url}[/cyan]\n"
+            f"Zeitpunkt: {report.zeitstempel.strftime('%d.%m.%Y %H:%M:%S')}\n"
+            f"Dauer: {report.dauer:.1f}s",
+            title="mp-web-audit",
+            border_style="blue",
+        )
+    )
 
     # Scores
     if report.scores:

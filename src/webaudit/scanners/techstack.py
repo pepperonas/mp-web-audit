@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 
 from webaudit.core.base_scanner import BaseScanner
 from webaudit.core.models import Finding, ScanContext, ScanResult, Severity
@@ -109,24 +108,29 @@ class TechstackScanner(BaseScanner):
             all_tech.extend(items)
 
         if all_tech:
-            findings.append(Finding(
-                scanner=self.name,
-                kategorie="Techstack",
-                titel="Erkannte Technologien",
-                severity=Severity.INFO,
-                beschreibung="Folgende Technologien wurden erkannt:\n" + "\n".join(f"- {t}" for t in all_tech),
-                beweis=", ".join(all_tech),
-                empfehlung="Unnoetige Technologie-Hinweise in Headern und HTML entfernen.",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Techstack",
+                    titel="Erkannte Technologien",
+                    severity=Severity.INFO,
+                    beschreibung="Folgende Technologien wurden erkannt:\n"
+                    + "\n".join(f"- {t}" for t in all_tech),
+                    beweis=", ".join(all_tech),
+                    empfehlung="Unnoetige Technologie-Hinweise in Headern und HTML entfernen.",
+                )
+            )
         else:
-            findings.append(Finding(
-                scanner=self.name,
-                kategorie="Techstack",
-                titel="Keine Technologien erkannt",
-                severity=Severity.INFO,
-                beschreibung="Es konnten keine spezifischen Technologien identifiziert werden.",
-                empfehlung="",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Techstack",
+                    titel="Keine Technologien erkannt",
+                    severity=Severity.INFO,
+                    beschreibung="Es konnten keine spezifischen Technologien identifiziert werden.",
+                    empfehlung="",
+                )
+            )
 
         return ScanResult(
             scanner_name=self.name,

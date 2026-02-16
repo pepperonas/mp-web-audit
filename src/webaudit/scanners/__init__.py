@@ -23,9 +23,7 @@ def get_scanner_registry() -> dict[str, type["BaseScanner"]]:
 
 def get_scanners_by_category(category: str) -> dict[str, type["BaseScanner"]]:
     """Gibt alle Scanner einer Kategorie zurueck."""
-    return {
-        name: cls for name, cls in _SCANNER_REGISTRY.items() if cls.category == category
-    }
+    return {name: cls for name, cls in _SCANNER_REGISTRY.items() if cls.category == category}
 
 
 def discover_scanners() -> None:

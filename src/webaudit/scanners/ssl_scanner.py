@@ -20,6 +20,7 @@ class SslScanner(BaseScanner):
     def is_available(self) -> bool:
         try:
             import sslyze  # noqa: F401
+
             return True
         except ImportError:
             return False
@@ -34,17 +35,22 @@ class SslScanner(BaseScanner):
         }
 
         if not context.target_url.startswith("https"):
-            findings.append(Finding(
-                scanner=self.name, kategorie="Sicherheit",
-                titel="Kein HTTPS",
-                severity=Severity.KRITISCH,
-                beschreibung="Die Seite nutzt kein HTTPS.",
-                empfehlung="HTTPS aktivieren und alle HTTP-Anfragen weiterleiten.",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Sicherheit",
+                    titel="Kein HTTPS",
+                    severity=Severity.KRITISCH,
+                    beschreibung="Die Seite nutzt kein HTTPS.",
+                    empfehlung="HTTPS aktivieren und alle HTTP-Anfragen weiterleiten.",
+                )
+            )
             raw["valid_cert"] = False
             return ScanResult(
-                scanner_name=self.name, kategorie="Sicherheit",
-                findings=findings, raw_data=raw,
+                scanner_name=self.name,
+                kategorie="Sicherheit",
+                findings=findings,
+                raw_data=raw,
             )
 
         domain = extract_domain(context.target_url)
@@ -57,14 +63,19 @@ class SslScanner(BaseScanner):
             findings.extend(result)
         except Exception as e:
             return ScanResult(
-                scanner_name=self.name, kategorie="Sicherheit",
-                success=False, error=f"sslyze Fehler: {e}",
-                findings=findings, raw_data=raw,
+                scanner_name=self.name,
+                kategorie="Sicherheit",
+                success=False,
+                error=f"sslyze Fehler: {e}",
+                findings=findings,
+                raw_data=raw,
             )
 
         return ScanResult(
-            scanner_name=self.name, kategorie="Sicherheit",
-            findings=findings, raw_data=raw,
+            scanner_name=self.name,
+            kategorie="Sicherheit",
+            findings=findings,
+            raw_data=raw,
         )
 
     def _run_sslyze(self, hostname: str, port: int, raw: dict) -> list[Finding]:
@@ -101,15 +112,23 @@ class SslScanner(BaseScanner):
             cert_result = result.scan_result.certificate_info
             if cert_result and cert_result.result:
                 for deployment in cert_result.result.certificate_deployments:
-                    if not deployment.leaf_certificate_subject_matches_hostname:
+                    # Zertifikatskette validieren via path_validation_results
+                    has_valid_path = any(
+                        pv.verified_certificate_chain is not None and pv.validation_error is None
+                        for pv in deployment.path_validation_results
+                    )
+                    if not has_valid_path:
                         raw["valid_cert"] = False
-                        findings.append(Finding(
-                            scanner=self.name, kategorie="Sicherheit",
-                            titel="Zertifikat stimmt nicht mit Hostname ueberein",
-                            severity=Severity.HOCH,
-                            beschreibung="Das SSL-Zertifikat passt nicht zum Hostnamen.",
-                            empfehlung="Korrektes Zertifikat fuer den Hostnamen installieren.",
-                        ))
+                        findings.append(
+                            Finding(
+                                scanner=self.name,
+                                kategorie="Sicherheit",
+                                titel="Zertifikat-Validierung fehlgeschlagen",
+                                severity=Severity.HOCH,
+                                beschreibung="Das SSL-Zertifikat konnte gegen keinen Trust-Store validiert werden.",
+                                empfehlung="Korrektes Zertifikat fuer den Hostnamen installieren.",
+                            )
+                        )
 
             # Schwache Protokolle
             weak_protocols = []
@@ -126,64 +145,80 @@ class SslScanner(BaseScanner):
 
             if weak_protocols:
                 raw["has_weak_protocols"] = True
-                findings.append(Finding(
-                    scanner=self.name, kategorie="Sicherheit",
-                    titel="Schwache SSL/TLS-Protokolle aktiv",
-                    severity=Severity.HOCH,
-                    beschreibung=f"Veraltete Protokolle sind aktiviert: {', '.join(weak_protocols)}",
-                    beweis=f"Aktive schwache Protokolle: {', '.join(weak_protocols)}",
-                    empfehlung="Nur TLSv1.2 und TLSv1.3 erlauben.",
-                ))
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel="Schwache SSL/TLS-Protokolle aktiv",
+                        severity=Severity.HOCH,
+                        beschreibung=f"Veraltete Protokolle sind aktiviert: {', '.join(weak_protocols)}",
+                        beweis=f"Aktive schwache Protokolle: {', '.join(weak_protocols)}",
+                        empfehlung="Nur TLSv1.2 und TLSv1.3 erlauben.",
+                    )
+                )
 
             # TLS 1.3 pruefen
             tls13 = result.scan_result.tls_1_3_cipher_suites
             if tls13 and tls13.result and not tls13.result.accepted_cipher_suites:
-                findings.append(Finding(
-                    scanner=self.name, kategorie="Sicherheit",
-                    titel="TLSv1.3 nicht unterstuetzt",
-                    severity=Severity.NIEDRIG,
-                    beschreibung="Der Server unterstuetzt kein TLS 1.3.",
-                    empfehlung="TLSv1.3 aktivieren fuer bessere Performance und Sicherheit.",
-                ))
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel="TLSv1.3 nicht unterstuetzt",
+                        severity=Severity.NIEDRIG,
+                        beschreibung="Der Server unterstuetzt kein TLS 1.3.",
+                        empfehlung="TLSv1.3 aktivieren fuer bessere Performance und Sicherheit.",
+                    )
+                )
 
             # Heartbleed
             heartbleed = result.scan_result.heartbleed
             if heartbleed and heartbleed.result and heartbleed.result.is_vulnerable_to_heartbleed:
                 raw["has_vulnerabilities"] = True
-                findings.append(Finding(
-                    scanner=self.name, kategorie="Sicherheit",
-                    titel="KRITISCH: Heartbleed-Schwachstelle!",
-                    severity=Severity.KRITISCH,
-                    beschreibung="Der Server ist anfaellig fuer den Heartbleed-Angriff (CVE-2014-0160).",
-                    empfehlung="OpenSSL sofort aktualisieren und alle Zertifikate/Schluessel erneuern.",
-                    referenzen=["https://heartbleed.com/"],
-                ))
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel="KRITISCH: Heartbleed-Schwachstelle!",
+                        severity=Severity.KRITISCH,
+                        beschreibung="Der Server ist anfaellig fuer den Heartbleed-Angriff (CVE-2014-0160).",
+                        empfehlung="OpenSSL sofort aktualisieren und alle Zertifikate/Schluessel erneuern.",
+                        referenzen=["https://heartbleed.com/"],
+                    )
+                )
 
             # ROBOT
             robot = result.scan_result.robot
             if robot and robot.result:
                 from sslyze import RobotScanResultEnum
+
                 if robot.result.robot_result in (
                     RobotScanResultEnum.VULNERABLE_WEAK_ORACLE,
                     RobotScanResultEnum.VULNERABLE_STRONG_ORACLE,
                 ):
                     raw["has_vulnerabilities"] = True
-                    findings.append(Finding(
-                        scanner=self.name, kategorie="Sicherheit",
-                        titel="ROBOT-Schwachstelle erkannt",
-                        severity=Severity.HOCH,
-                        beschreibung="Der Server ist anfaellig fuer den ROBOT-Angriff.",
-                        empfehlung="TLS-Konfiguration aktualisieren, RSA-Key-Exchange deaktivieren.",
-                        referenzen=["https://robotattack.org/"],
-                    ))
+                    findings.append(
+                        Finding(
+                            scanner=self.name,
+                            kategorie="Sicherheit",
+                            titel="ROBOT-Schwachstelle erkannt",
+                            severity=Severity.HOCH,
+                            beschreibung="Der Server ist anfaellig fuer den ROBOT-Angriff.",
+                            empfehlung="TLS-Konfiguration aktualisieren, RSA-Key-Exchange deaktivieren.",
+                            referenzen=["https://robotattack.org/"],
+                        )
+                    )
 
         if not findings:
-            findings.append(Finding(
-                scanner=self.name, kategorie="Sicherheit",
-                titel="SSL/TLS-Konfiguration in Ordnung",
-                severity=Severity.INFO,
-                beschreibung="Keine Probleme bei der SSL/TLS-Konfiguration erkannt.",
-                empfehlung="",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Sicherheit",
+                    titel="SSL/TLS-Konfiguration in Ordnung",
+                    severity=Severity.INFO,
+                    beschreibung="Keine Probleme bei der SSL/TLS-Konfiguration erkannt.",
+                    empfehlung="",
+                )
+            )
 
         return findings

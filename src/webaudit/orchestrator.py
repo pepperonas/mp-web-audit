@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
+from webaudit import __version__
 from webaudit.core.config import ScanConfig
 from webaudit.core.http_client import create_http_client
 from webaudit.core.models import AuditReport, AutorisierungInfo, ScanContext, ScanResult
@@ -26,6 +27,7 @@ async def run_audit(
 ) -> AuditReport:
     """Fuehrt ein komplettes Audit durch."""
     console = console or Console()
+    console.print(f"\n[bold blue]mp-web-audit[/bold blue] [dim]v{__version__}[/dim]")
     discover_scanners()
 
     target_url = normalize_url(config.target_url)
@@ -76,7 +78,7 @@ async def run_audit(
         console.print(
             f"[green]Geladen:[/green] Status {resp.status_code}, "
             f"{len(resp.text)} Bytes, "
-            f"{context.response_time*1000:.0f}ms TTFB"
+            f"{context.response_time * 1000:.0f}ms TTFB"
         )
 
         # Scanner filtern und ausfuehren
@@ -96,13 +98,18 @@ async def run_audit(
                 scanner = scanner_cls(config, http)
 
                 if not scanner.is_available():
-                    progress.update(task, description=f"[yellow]{scanner_name}: nicht verfuegbar (uebersprungen)[/yellow]")
-                    report.results.append(ScanResult(
-                        scanner_name=scanner_name,
-                        kategorie=scanner_cls.category,
-                        success=False,
-                        error="Externe Abhaengigkeit nicht verfuegbar",
-                    ))
+                    progress.update(
+                        task,
+                        description=f"[yellow]{scanner_name}: nicht verfuegbar (uebersprungen)[/yellow]",
+                    )
+                    report.results.append(
+                        ScanResult(
+                            scanner_name=scanner_name,
+                            kategorie=scanner_cls.category,
+                            success=False,
+                            error="Externe Abhaengigkeit nicht verfuegbar",
+                        )
+                    )
                     progress.remove_task(task)
                     continue
 
@@ -113,19 +120,25 @@ async def run_audit(
                     result.dauer = t["elapsed"]
                     report.results.append(result)
 
-                    status = "[green]OK[/green]" if result.success else f"[red]Fehler: {result.error}[/red]"
+                    status = (
+                        "[green]OK[/green]"
+                        if result.success
+                        else f"[red]Fehler: {result.error}[/red]"
+                    )
                     findings_count = len(result.findings)
                     progress.update(
                         task,
                         description=f"{scanner_name}: {status} ({findings_count} Findings, {t['elapsed']:.1f}s)",
                     )
                 except Exception as e:
-                    report.results.append(ScanResult(
-                        scanner_name=scanner_name,
-                        kategorie=scanner_cls.category,
-                        success=False,
-                        error=str(e),
-                    ))
+                    report.results.append(
+                        ScanResult(
+                            scanner_name=scanner_name,
+                            kategorie=scanner_cls.category,
+                            success=False,
+                            error=str(e),
+                        )
+                    )
                     progress.update(task, description=f"[red]{scanner_name}: {e}[/red]")
                 finally:
                     try:

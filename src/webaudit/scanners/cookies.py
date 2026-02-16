@@ -52,25 +52,29 @@ class CookiesScanner(BaseScanner):
 
             if issues:
                 insecure_count += 1
-                findings.append(Finding(
-                    scanner=self.name,
-                    kategorie="Sicherheit",
-                    titel=f"Cookie '{name}' - fehlende Flags: {', '.join(issues)}",
-                    severity=Severity.MITTEL if "Secure" in issues else Severity.NIEDRIG,
-                    beschreibung=f"Dem Cookie '{name}' fehlen wichtige Sicherheitsflags: {', '.join(issues)}.",
-                    beweis=cookie_str[:200],
-                    empfehlung=f"Fehlende Flags setzen: {', '.join(issues)}.",
-                ))
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel=f"Cookie '{name}' - fehlende Flags: {', '.join(issues)}",
+                        severity=Severity.MITTEL if "Secure" in issues else Severity.NIEDRIG,
+                        beschreibung=f"Dem Cookie '{name}' fehlen wichtige Sicherheitsflags: {', '.join(issues)}.",
+                        beweis=cookie_str[:200],
+                        empfehlung=f"Fehlende Flags setzen: {', '.join(issues)}.",
+                    )
+                )
 
         if not set_cookies:
-            findings.append(Finding(
-                scanner=self.name,
-                kategorie="Sicherheit",
-                titel="Keine Cookies gesetzt",
-                severity=Severity.INFO,
-                beschreibung="Die Seite setzt keine Cookies.",
-                empfehlung="",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Sicherheit",
+                    titel="Keine Cookies gesetzt",
+                    severity=Severity.INFO,
+                    beschreibung="Die Seite setzt keine Cookies.",
+                    empfehlung="",
+                )
+            )
 
         return ScanResult(
             scanner_name=self.name,

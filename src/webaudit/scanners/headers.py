@@ -64,39 +64,45 @@ class HeadersScanner(BaseScanner):
                 present_headers.append(header_name)
                 header_values[header_name] = value
             else:
-                findings.append(Finding(
-                    scanner=self.name,
-                    kategorie="Sicherheit",
-                    titel=info["titel"],
-                    severity=info["severity"],
-                    beschreibung=info["beschreibung"],
-                    empfehlung=info["empfehlung"],
-                ))
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel=info["titel"],
+                        severity=info["severity"],
+                        beschreibung=info["beschreibung"],
+                        empfehlung=info["empfehlung"],
+                    )
+                )
 
         # Pruefen ob Server-Header unnoetige Infos preisgibt
         server = headers_lower.get("server", "")
         if server and any(v in server.lower() for v in ["apache/", "nginx/", "iis/"]):
-            findings.append(Finding(
-                scanner=self.name,
-                kategorie="Sicherheit",
-                titel="Server-Version exponiert",
-                severity=Severity.NIEDRIG,
-                beschreibung=f"Der Server-Header gibt die Version preis: {server}",
-                beweis=f"Server: {server}",
-                empfehlung="Server-Version aus dem Header entfernen.",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Sicherheit",
+                    titel="Server-Version exponiert",
+                    severity=Severity.NIEDRIG,
+                    beschreibung=f"Der Server-Header gibt die Version preis: {server}",
+                    beweis=f"Server: {server}",
+                    empfehlung="Server-Version aus dem Header entfernen.",
+                )
+            )
 
         x_powered = headers_lower.get("x-powered-by", "")
         if x_powered:
-            findings.append(Finding(
-                scanner=self.name,
-                kategorie="Sicherheit",
-                titel="X-Powered-By Header exponiert",
-                severity=Severity.NIEDRIG,
-                beschreibung=f"Der X-Powered-By Header gibt Technologie-Infos preis: {x_powered}",
-                beweis=f"X-Powered-By: {x_powered}",
-                empfehlung="X-Powered-By Header entfernen.",
-            ))
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Sicherheit",
+                    titel="X-Powered-By Header exponiert",
+                    severity=Severity.NIEDRIG,
+                    beschreibung=f"Der X-Powered-By Header gibt Technologie-Infos preis: {x_powered}",
+                    beweis=f"X-Powered-By: {x_powered}",
+                    empfehlung="X-Powered-By Header entfernen.",
+                )
+            )
 
         return ScanResult(
             scanner_name=self.name,

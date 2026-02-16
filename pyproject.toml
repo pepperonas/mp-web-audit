@@ -4,8 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mp-web-audit"
-version = "0.1.0"
+version = "0.0.1"
 description = "CLI-basiertes Web-Auditing-Framework fuer genehmigte Sicherheitspruefungen"
+license = "MIT"
+authors = [
+    {name = "Martin Pfeffer"},
+]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",

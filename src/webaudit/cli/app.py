@@ -22,7 +22,11 @@ def version_callback(value: bool) -> None:
 @app.callback()
 def main(
     version: bool = typer.Option(
-        False, "--version", "-V", callback=version_callback, is_eager=True,
+        False,
+        "--version",
+        "-V",
+        callback=version_callback,
+        is_eager=True,
         help="Version anzeigen.",
     ),
 ) -> None:

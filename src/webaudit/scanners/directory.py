@@ -1,11 +1,8 @@
-"""Directory-Discovery via feroxbuster."""
+"""Directory-Discovery via HTTP-Requests (Wordlist-basiert)."""
 
 from __future__ import annotations
 
 import asyncio
-import json
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +16,8 @@ DEFAULT_WORDLIST = Path(__file__).parent.parent.parent.parent / "wordlists" / "c
 @register_scanner
 class DirectoryScanner(BaseScanner):
     name = "directory"
-    description = "Verzeichnis-/Datei-Enumeration via feroxbuster"
+    description = "Verzeichnis-/Datei-Enumeration via Wordlist"
     category = "discovery"
-
-    def is_available(self) -> bool:
-        return shutil.which("feroxbuster") is not None
 
     async def scan(self, context: ScanContext) -> ScanResult:
         findings: list[Finding] = []
@@ -31,119 +25,104 @@ class DirectoryScanner(BaseScanner):
 
         if not wordlist.exists():
             return ScanResult(
-                scanner_name=self.name, kategorie="Discovery",
-                success=False, error=f"Wordlist nicht gefunden: {wordlist}",
+                scanner_name=self.name,
+                kategorie="Discovery",
+                success=False,
+                error=f"Wordlist nicht gefunden: {wordlist}",
             )
 
-        try:
-            discovered, raw = await self._run_feroxbuster(
-                context.target_url, wordlist
-            )
-        except Exception as e:
-            return ScanResult(
-                scanner_name=self.name, kategorie="Discovery",
-                success=False, error=f"feroxbuster Fehler: {e}",
-            )
-
-        # Ergebnisse kategorisieren
-        interesting: list[dict] = []
-        for entry in discovered:
-            status = entry.get("status", 0)
-            if status in (200, 301, 302, 403):
-                interesting.append(entry)
-
-        if interesting:
-            summary_lines = []
-            for entry in interesting[:50]:
-                summary_lines.append(
-                    f"  [{entry.get('status')}] {entry.get('url', '')} "
-                    f"({entry.get('content_length', 0)} Bytes)"
-                )
-
-            findings.append(Finding(
-                scanner=self.name, kategorie="Discovery",
-                titel=f"{len(interesting)} Pfad(e) entdeckt",
-                severity=Severity.INFO,
-                beschreibung=f"feroxbuster hat {len(interesting)} Pfade gefunden.",
-                beweis="\n".join(summary_lines[:20]),
-                empfehlung="Ueberpruefen ob alle gefundenen Pfade beabsichtigt sind.",
-            ))
-
-            # 403-Eintraege separat hervorheben
-            forbidden = [e for e in interesting if e.get("status") == 403]
-            if forbidden:
-                findings.append(Finding(
-                    scanner=self.name, kategorie="Discovery",
-                    titel=f"{len(forbidden)} Pfad(e) mit Zugriffsverweigerung (403)",
-                    severity=Severity.NIEDRIG,
-                    beschreibung="Diese Pfade existieren, der Zugriff wird aber verweigert.",
-                    beweis="\n".join(e.get("url", "") for e in forbidden[:10]),
-                    empfehlung="Sicherstellen dass die 403-Seiten keine Informationen preisgeben.",
-                ))
-        else:
-            findings.append(Finding(
-                scanner=self.name, kategorie="Discovery",
-                titel="Keine zusaetzlichen Pfade entdeckt",
-                severity=Severity.INFO,
-                beschreibung="feroxbuster hat keine interessanten Pfade gefunden.",
-                empfehlung="",
-            ))
-
-        raw["total_discovered"] = len(interesting)
-        return ScanResult(
-            scanner_name=self.name, kategorie="Discovery",
-            findings=findings, raw_data=raw,
-        )
-
-    async def _run_feroxbuster(
-        self, target_url: str, wordlist: Path
-    ) -> tuple[list[dict], dict]:
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
-            output_file = f.name
-
-        extensions = self.config.extensions
-        rate = self.config.rate_limit
-
-        # Argumente als Liste (kein Shell-Invocation) - sicher gegen Injection
-        cmd = [
-            "feroxbuster",
-            "-u", target_url,
-            "-w", str(wordlist),
-            "-o", output_file,
-            "--json",
-            "-t", str(min(rate, 50)),
-            "--rate-limit", str(rate),
-            "-x", extensions,
-            "--no-state",
-            "--silent",
+        paths = [
+            line.strip()
+            for line in wordlist.read_text().splitlines()
+            if line.strip() and not line.startswith("#")
         ]
-        if not self.config.verify_ssl:
-            cmd.append("-k")
 
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await proc.communicate()
+        # Erweiterungen anhaengen
+        extensions = [e.strip() for e in self.config.extensions.split(",") if e.strip()]
+        all_paths = list(paths)
+        for path in paths:
+            for ext in extensions:
+                all_paths.append(f"{path}.{ext}")
 
-        discovered: list[dict] = []
-        output_path = Path(output_file)
-        if output_path.exists():
-            for line in output_path.read_text().strip().split("\n"):
-                if not line:
-                    continue
+        base_url = context.target_url.rstrip("/")
+        discovered: list[dict[str, Any]] = []
+        semaphore = asyncio.Semaphore(self.config.rate_limit)
+
+        async def check_path(path: str) -> dict[str, Any] | None:
+            url = f"{base_url}/{path.lstrip('/')}"
+            async with semaphore:
                 try:
-                    entry = json.loads(line)
-                    if entry.get("type") == "response":
-                        discovered.append(entry)
-                except json.JSONDecodeError:
-                    continue
-            output_path.unlink(missing_ok=True)
+                    resp = await self.http.get(url)
+                    if resp.status_code in (200, 301, 302, 403):
+                        content_length = len(resp.text) if hasattr(resp, "text") else 0
+                        return {
+                            "url": url,
+                            "status": resp.status_code,
+                            "content_length": content_length,
+                        }
+                except Exception:
+                    pass
+            return None
+
+        tasks = [check_path(p) for p in all_paths]
+        results = await asyncio.gather(*tasks)
+        discovered = [r for r in results if r is not None]
 
         raw: dict[str, Any] = {
             "wordlist": str(wordlist),
-            "extensions": extensions,
+            "extensions": self.config.extensions,
+            "paths_tested": len(all_paths),
+            "total_discovered": len(discovered),
         }
 
-        return discovered, raw
+        if discovered:
+            summary_lines = []
+            for entry in discovered[:50]:
+                summary_lines.append(
+                    f"  [{entry['status']}] {entry['url']} ({entry['content_length']} Bytes)"
+                )
+
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Discovery",
+                    titel=f"{len(discovered)} Pfad(e) entdeckt",
+                    severity=Severity.INFO,
+                    beschreibung=f"Directory-Scan hat {len(discovered)} Pfade gefunden.",
+                    beweis="\n".join(summary_lines[:20]),
+                    empfehlung="Ueberpruefen ob alle gefundenen Pfade beabsichtigt sind.",
+                )
+            )
+
+            # 403-Eintraege separat hervorheben
+            forbidden = [e for e in discovered if e["status"] == 403]
+            if forbidden:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Discovery",
+                        titel=f"{len(forbidden)} Pfad(e) mit Zugriffsverweigerung (403)",
+                        severity=Severity.NIEDRIG,
+                        beschreibung="Diese Pfade existieren, der Zugriff wird aber verweigert.",
+                        beweis="\n".join(e["url"] for e in forbidden[:10]),
+                        empfehlung="Sicherstellen dass die 403-Seiten keine Informationen preisgeben.",
+                    )
+                )
+        else:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Discovery",
+                    titel="Keine zusaetzlichen Pfade entdeckt",
+                    severity=Severity.INFO,
+                    beschreibung="Directory-Scan hat keine interessanten Pfade gefunden.",
+                    empfehlung="",
+                )
+            )
+
+        return ScanResult(
+            scanner_name=self.name,
+            kategorie="Discovery",
+            findings=findings,
+            raw_data=raw,
+        )

@@ -6,7 +6,6 @@ import pytest
 from bs4 import BeautifulSoup
 
 from webaudit.core.config import ScanConfig
-from webaudit.core.http_client import AuditHttpClient
 from webaudit.core.models import ScanContext
 
 
