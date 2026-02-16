@@ -95,6 +95,7 @@ class MockResponse:
         self.text = text
         self.url = url
         self.headers = {"content-type": "text/html"}
+        self.history = []
 
 
 @pytest.fixture

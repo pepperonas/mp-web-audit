@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from webaudit.core.config import ScanConfig
+from webaudit.cli.common import build_config, check_fail_on
 
 console = Console()
 
@@ -26,28 +26,42 @@ def web_cmd(
         False, "--no-verify-ssl", help="SSL-Verifizierung deaktivieren"
     ),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Ausfuehrliche Ausgabe"),
+    fail_on: Optional[str] = typer.Option(
+        None,
+        "--fail-on",
+        help="Exit-Code 1 bei Findings >= Severity (KRITISCH|HOCH|MITTEL|NIEDRIG)",
+    ),
+    quiet: bool = typer.Option(False, "-q", "--quiet", help="Keine Terminal-Ausgabe"),
+    json_stdout: bool = typer.Option(False, "--json-stdout", help="JSON-Report nach stdout"),
+    weights: Optional[str] = typer.Option(None, "--weights", help="Score-Gewichtung als JSON"),
 ) -> None:
     """Fuehrt nur Web-Checks durch (Performance, SEO, Mobile, Usability)."""
-    console.print(
-        Panel(
-            f"[cyan]Web-Audit[/cyan] fuer: [bold]{url}[/bold]\n"
-            "Scanner: Performance, SEO, Mobile, Usability",
-            border_style="blue",
+    if not quiet:
+        console.print(
+            Panel(
+                f"[cyan]Web-Audit[/cyan] fuer: [bold]{url}[/bold]\n"
+                "Scanner: Performance, SEO, Mobile, Usability",
+                border_style="blue",
+            )
         )
-    )
 
-    config = ScanConfig(
-        target_url=url,
-        output_dir=output,
-        formats=[f.strip() for f in formats.split(",")],
+    config = build_config(
+        url=url,
+        categories=["web"],
+        output=output,
+        formats=formats,
         timeout=timeout,
         rate_limit=rate_limit,
-        user_agent=user_agent or "mp-web-audit/0.1.0",
-        verify_ssl=not no_verify_ssl,
+        user_agent=user_agent,
+        no_verify_ssl=no_verify_ssl,
         verbose=verbose,
-        categories=["web"],
+        fail_on=fail_on,
+        quiet=quiet,
+        json_stdout=json_stdout,
+        weights=weights,
     )
 
     from webaudit.orchestrator import run_audit
 
-    asyncio.run(run_audit(config, scan_typ="Web-Checks", console=console))
+    report = asyncio.run(run_audit(config, scan_typ="Web-Checks", console=console))
+    check_fail_on(report, fail_on)

@@ -27,3 +27,9 @@ class ScanConfig:
     categories: list[str] = field(
         default_factory=lambda: ["web", "security", "techstack", "discovery"]
     )
+    # CI/CD
+    fail_on: str | None = None
+    quiet: bool = False
+    json_stdout: bool = False
+    # Score-Gewichtung
+    scoring_weights: dict[str, float] | None = None

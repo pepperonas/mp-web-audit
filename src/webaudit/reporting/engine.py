@@ -8,6 +8,7 @@ from rich.console import Console
 
 from webaudit.core.config import ScanConfig
 from webaudit.core.models import AuditReport
+from webaudit.reporting.csv_reporter import generate_csv_report
 from webaudit.reporting.html_reporter import generate_html_report
 from webaudit.reporting.json_reporter import generate_json_report
 from webaudit.reporting.terminal_reporter import render_terminal_report
@@ -40,5 +41,11 @@ def generate_reports(
         generate_html_report(report, html_path)
         generated.append(html_path)
         console.print(f"[green]HTML-Report:[/green] {html_path}")
+
+    if "csv" in config.formats:
+        csv_path = config.output_dir / f"{base_name}.csv"
+        generate_csv_report(report, csv_path)
+        generated.append(csv_path)
+        console.print(f"[green]CSV-Report:[/green] {csv_path}")
 
     return generated

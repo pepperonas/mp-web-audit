@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 
 from webaudit.cli.commands.scan import _show_authorization_prompt
-from webaudit.core.config import ScanConfig
+from webaudit.cli.common import build_config, check_fail_on
 
 console = Console()
 
@@ -30,6 +30,13 @@ def discover_cmd(
         "php,html,js,txt,bak", "--extensions", help="Datei-Erweiterungen"
     ),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Ausfuehrliche Ausgabe"),
+    fail_on: Optional[str] = typer.Option(
+        None,
+        "--fail-on",
+        help="Exit-Code 1 bei Findings >= Severity (KRITISCH|HOCH|MITTEL|NIEDRIG)",
+    ),
+    quiet: bool = typer.Option(False, "-q", "--quiet", help="Keine Terminal-Ausgabe"),
+    json_stdout: bool = typer.Option(False, "--json-stdout", help="JSON-Report nach stdout"),
 ) -> None:
     """Fuehrt Directory-Discovery via feroxbuster durch."""
     auth_time = _show_authorization_prompt(
@@ -39,24 +46,28 @@ def discover_cmd(
         discovery=True,
     )
 
-    config = ScanConfig(
-        target_url=url,
-        output_dir=output,
-        formats=[f.strip() for f in formats.split(",")],
+    config = build_config(
+        url=url,
+        categories=["discovery"],
+        output=output,
+        formats=formats,
         timeout=timeout,
         rate_limit=rate_limit,
-        user_agent=user_agent or "mp-web-audit/0.1.0",
-        verify_ssl=not no_verify_ssl,
+        user_agent=user_agent,
+        no_verify_ssl=no_verify_ssl,
         wordlist=wordlist,
         extensions=extensions,
         verbose=verbose,
-        categories=["discovery"],
+        fail_on=fail_on,
+        quiet=quiet,
+        json_stdout=json_stdout,
     )
 
     from webaudit.orchestrator import run_audit
 
-    asyncio.run(
+    report = asyncio.run(
         run_audit(
             config, scan_typ="Directory-Discovery", console=console, autorisierung_zeit=auth_time
         )
     )
+    check_fail_on(report, fail_on)

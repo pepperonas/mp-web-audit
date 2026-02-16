@@ -31,11 +31,13 @@ def discover_scanners() -> None:
     from webaudit.scanners import (  # noqa: F401
         cookies,
         directory,
+        dns_scanner,
         headers,
         misconfig,
         mobile,
         performance,
         ports,
+        redirect,
         seo,
         ssl_scanner,
         techstack,

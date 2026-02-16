@@ -1,4 +1,4 @@
-"""Performance-Scanner: TTFB, Ladezeiten, Seitengroesse, Redirects."""
+"""Performance-Scanner: TTFB, Ladezeiten, Seitengroesse, Redirects, Komprimierung, Caching."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from webaudit.scanners import register_scanner
 @register_scanner
 class PerformanceScanner(BaseScanner):
     name = "performance"
-    description = "Misst TTFB, Ladezeit, Seitengroesse und Redirects"
+    description = "Misst TTFB, Ladezeit, Seitengroesse, Komprimierung und Caching"
     category = "web"
 
     async def scan(self, context: ScanContext) -> ScanResult:
@@ -23,12 +23,21 @@ class PerformanceScanner(BaseScanner):
 
         # Ressourcen zaehlen (Bilder, Scripts, Stylesheets)
         resource_count = 0
+        render_blocking_scripts = 0
         if context.soup:
             resource_count = (
                 len(context.soup.find_all("img"))
                 + len(context.soup.find_all("script", src=True))
                 + len(context.soup.find_all("link", rel="stylesheet"))
             )
+            # Render-blockierende Scripts zaehlen
+            for script in context.soup.find_all("script", src=True):
+                has_async = script.get("async") is not None
+                has_defer = script.get("defer") is not None
+                if not has_async and not has_defer:
+                    render_blocking_scripts += 1
+
+        headers_lower = {k.lower(): v for k, v in context.headers.items()}
 
         # TTFB bewerten
         if ttfb_ms > 1000:
@@ -120,6 +129,64 @@ class PerformanceScanner(BaseScanner):
                 )
             )
 
+        # Komprimierung pruefen
+        content_encoding = headers_lower.get("content-encoding", "").lower()
+        has_compression = content_encoding in ("gzip", "br", "deflate")
+        if not has_compression and page_size_kb > 10:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Performance",
+                    titel="Keine Komprimierung aktiviert",
+                    severity=Severity.MITTEL,
+                    beschreibung=f"Die Antwort nutzt keine Komprimierung (gzip/brotli). Seitengroesse: {page_size_kb:.0f} KB.",
+                    beweis=f"Content-Encoding: {content_encoding or 'nicht gesetzt'}",
+                    empfehlung="gzip oder Brotli-Komprimierung auf dem Webserver aktivieren.",
+                )
+            )
+
+        # Cache-Headers pruefen
+        cache_control = headers_lower.get("cache-control", "")
+        has_etag = "etag" in headers_lower
+        has_last_modified = "last-modified" in headers_lower
+        if not cache_control and not has_etag and not has_last_modified:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Performance",
+                    titel="Keine Cache-Headers gesetzt",
+                    severity=Severity.MITTEL,
+                    beschreibung="Weder Cache-Control, ETag noch Last-Modified Header sind gesetzt.",
+                    empfehlung="Cache-Control Header setzen, um Browser-Caching zu ermoeglichen.",
+                )
+            )
+
+        # Render-blockierende Ressourcen
+        if render_blocking_scripts > 2:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Performance",
+                    titel="Viele render-blockierende Scripts",
+                    severity=Severity.MITTEL,
+                    beschreibung=f"{render_blocking_scripts} Script-Tags ohne async/defer blockieren das Rendering.",
+                    beweis=f"{render_blocking_scripts} blockierende <script>-Tags",
+                    empfehlung="Scripts mit async oder defer laden, oder ans Ende des <body> verschieben.",
+                )
+            )
+        elif render_blocking_scripts > 0:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Performance",
+                    titel="Render-blockierende Scripts vorhanden",
+                    severity=Severity.NIEDRIG,
+                    beschreibung=f"{render_blocking_scripts} Script-Tag(s) ohne async/defer.",
+                    beweis=f"{render_blocking_scripts} blockierende <script>-Tags",
+                    empfehlung="Scripts mit async oder defer laden.",
+                )
+            )
+
         return ScanResult(
             scanner_name=self.name,
             kategorie="Performance",
@@ -131,5 +198,8 @@ class PerformanceScanner(BaseScanner):
                 "redirect_count": redirect_count,
                 "resource_count": resource_count,
                 "redirects": context.redirects,
+                "has_compression": has_compression,
+                "content_encoding": content_encoding,
+                "render_blocking_scripts": render_blocking_scripts,
             },
         )

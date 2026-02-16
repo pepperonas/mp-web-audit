@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime
 
@@ -12,11 +13,72 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from webaudit import __version__
 from webaudit.core.config import ScanConfig
 from webaudit.core.http_client import create_http_client
-from webaudit.core.models import AuditReport, AutorisierungInfo, ScanContext, ScanResult
+from webaudit.core.models import (
+    AuditReport,
+    AutorisierungInfo,
+    ScanContext,
+    ScanMetadata,
+    ScanResult,
+)
 from webaudit.core.scoring import calculate_scores
 from webaudit.core.utils import normalize_url, timer
 from webaudit.reporting.engine import generate_reports
 from webaudit.scanners import discover_scanners, get_scanner_registry
+
+
+async def _run_scanner(
+    scanner_cls: type,
+    config: ScanConfig,
+    http,
+    context: ScanContext,
+    progress: Progress,
+) -> ScanResult:
+    """Fuehrt einen einzelnen Scanner aus (Setup, Scan, Teardown)."""
+    scanner_name = scanner_cls.name
+    task = progress.add_task(f"{scanner_cls.description}...", total=None)
+
+    scanner = scanner_cls(config, http)
+
+    if not scanner.is_available():
+        progress.update(
+            task,
+            description=f"[yellow]{scanner_name}: nicht verfuegbar (uebersprungen)[/yellow]",
+        )
+        progress.remove_task(task)
+        return ScanResult(
+            scanner_name=scanner_name,
+            kategorie=scanner_cls.category,
+            success=False,
+            error="Externe Abhaengigkeit nicht verfuegbar",
+        )
+
+    try:
+        await scanner.setup()
+        with timer() as t:
+            result = await scanner.scan(context)
+        result.dauer = t["elapsed"]
+
+        status = "[green]OK[/green]" if result.success else f"[red]Fehler: {result.error}[/red]"
+        findings_count = len(result.findings)
+        progress.update(
+            task,
+            description=f"{scanner_name}: {status} ({findings_count} Findings, {t['elapsed']:.1f}s)",
+        )
+        return result
+    except Exception as e:
+        progress.update(task, description=f"[red]{scanner_name}: {e}[/red]")
+        return ScanResult(
+            scanner_name=scanner_name,
+            kategorie=scanner_cls.category,
+            success=False,
+            error=str(e),
+        )
+    finally:
+        try:
+            await scanner.teardown()
+        except Exception:
+            pass
+        progress.remove_task(task)
 
 
 async def run_audit(
@@ -27,7 +89,8 @@ async def run_audit(
 ) -> AuditReport:
     """Fuehrt ein komplettes Audit durch."""
     console = console or Console()
-    console.print(f"\n[bold blue]mp-web-audit[/bold blue] [dim]v{__version__}[/dim]")
+    if not config.quiet:
+        console.print(f"\n[bold blue]mp-web-audit[/bold blue] [dim]v{__version__}[/dim]")
     discover_scanners()
 
     target_url = normalize_url(config.target_url)
@@ -46,11 +109,13 @@ async def run_audit(
 
     async with create_http_client(config) as http:
         # Initiale Anfrage
-        console.print(f"\n[cyan]Lade Ziel:[/cyan] {target_url}")
+        if not config.quiet:
+            console.print(f"\n[cyan]Lade Ziel:[/cyan] {target_url}")
         try:
             resp = await http.get(target_url)
         except Exception as e:
-            console.print(f"[red]Fehler beim Laden der Ziel-URL:[/red] {e}")
+            if not config.quiet:
+                console.print(f"[red]Fehler beim Laden der Ziel-URL:[/red] {e}")
             report.dauer = round(time.monotonic() - start_time, 1)
             return report
 
@@ -75,84 +140,65 @@ async def run_audit(
             cookies=cookies_dict,
         )
 
-        console.print(
-            f"[green]Geladen:[/green] Status {resp.status_code}, "
-            f"{len(resp.text)} Bytes, "
-            f"{context.response_time * 1000:.0f}ms TTFB"
-        )
+        if not config.quiet:
+            console.print(
+                f"[green]Geladen:[/green] Status {resp.status_code}, "
+                f"{len(resp.text)} Bytes, "
+                f"{context.response_time * 1000:.0f}ms TTFB"
+            )
 
         # Scanner filtern und ausfuehren
         registry = get_scanner_registry()
         scanners_to_run = _filter_scanners(registry, config)
 
-        console.print(f"\n[cyan]Starte {len(scanners_to_run)} Scanner...[/cyan]\n")
+        if not config.quiet:
+            console.print(f"\n[cyan]Starte {len(scanners_to_run)} Scanner...[/cyan]\n")
 
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             TimeElapsedColumn(),
-            console=console,
+            console=Console(quiet=config.quiet),
         ) as progress:
-            for scanner_name, scanner_cls in scanners_to_run.items():
-                task = progress.add_task(f"{scanner_cls.description}...", total=None)
-                scanner = scanner_cls(config, http)
+            # Parallele Ausfuehrung aller Scanner via TaskGroup
+            results: list[ScanResult] = []
 
-                if not scanner.is_available():
-                    progress.update(
-                        task,
-                        description=f"[yellow]{scanner_name}: nicht verfuegbar (uebersprungen)[/yellow]",
-                    )
-                    report.results.append(
-                        ScanResult(
-                            scanner_name=scanner_name,
-                            kategorie=scanner_cls.category,
-                            success=False,
-                            error="Externe Abhaengigkeit nicht verfuegbar",
-                        )
-                    )
-                    progress.remove_task(task)
-                    continue
+            async with asyncio.TaskGroup() as tg:
+                tasks = []
+                for scanner_name, scanner_cls in scanners_to_run.items():
+                    t = tg.create_task(_run_scanner(scanner_cls, config, http, context, progress))
+                    tasks.append(t)
 
-                try:
-                    await scanner.setup()
-                    with timer() as t:
-                        result = await scanner.scan(context)
-                    result.dauer = t["elapsed"]
-                    report.results.append(result)
-
-                    status = (
-                        "[green]OK[/green]"
-                        if result.success
-                        else f"[red]Fehler: {result.error}[/red]"
-                    )
-                    findings_count = len(result.findings)
-                    progress.update(
-                        task,
-                        description=f"{scanner_name}: {status} ({findings_count} Findings, {t['elapsed']:.1f}s)",
-                    )
-                except Exception as e:
-                    report.results.append(
-                        ScanResult(
-                            scanner_name=scanner_name,
-                            kategorie=scanner_cls.category,
-                            success=False,
-                            error=str(e),
-                        )
-                    )
-                    progress.update(task, description=f"[red]{scanner_name}: {e}[/red]")
-                finally:
-                    try:
-                        await scanner.teardown()
-                    except Exception:
-                        pass
-                    progress.remove_task(task)
+            results = [t.result() for t in tasks]
+            report.results = results
 
     # Scores berechnen
-    report.scores = calculate_scores(report)
+    report.scores = calculate_scores(report, custom_weights=config.scoring_weights)
     report.dauer = round(time.monotonic() - start_time, 1)
 
+    # Metadaten setzen
+    import platform
+
+    report.metadata = ScanMetadata(
+        tool_version=__version__,
+        python_version=platform.python_version(),
+        scan_config={
+            "categories": config.categories,
+            "timeout": config.timeout,
+            "rate_limit": config.rate_limit,
+        },
+    )
+
     # Reports generieren
-    generate_reports(report, config, console)
+    if config.json_stdout:
+        import json
+        import sys
+
+        data = report.model_dump(mode="json")
+        json.dump(data, sys.stdout, indent=2, ensure_ascii=False, default=str)
+        sys.stdout.write("\n")
+    else:
+        generate_reports(report, config, console if not config.quiet else Console(quiet=True))
 
     return report
 

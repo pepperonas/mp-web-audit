@@ -1,4 +1,4 @@
-"""Async httpx Client-Factory mit Rate-Limiting."""
+"""Async httpx Client-Factory mit Rate-Limiting, Retry und Connection Pool."""
 
 from __future__ import annotations
 
@@ -8,6 +8,10 @@ from typing import Any
 import httpx
 
 from webaudit.core.config import ScanConfig
+
+RETRYABLE_STATUS_CODES = {429, 502, 503}
+MAX_RETRIES = 2
+BACKOFF_BASE = 0.5
 
 
 class RateLimiter:
@@ -24,7 +28,7 @@ class RateLimiter:
 
 
 class AuditHttpClient:
-    """HTTP-Client mit eingebautem Rate-Limiting fuer alle Scanner."""
+    """HTTP-Client mit eingebautem Rate-Limiting, Retry und Connection Pool."""
 
     def __init__(self, config: ScanConfig) -> None:
         self.config = config
@@ -34,15 +38,39 @@ class AuditHttpClient:
             follow_redirects=True,
             verify=config.verify_ssl,
             headers={"User-Agent": config.user_agent},
+            limits=httpx.Limits(
+                max_connections=50,
+                max_keepalive_connections=20,
+            ),
         )
 
+    async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        last_exc: Exception | None = None
+        for attempt in range(MAX_RETRIES + 1):
+            await self._rate_limiter.acquire()
+            try:
+                resp = await self._client.request(method, url, **kwargs)
+                if resp.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_RETRIES:
+                    delay = BACKOFF_BASE * (2**attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                return resp
+            except httpx.TimeoutException as e:
+                last_exc = e
+                if attempt < MAX_RETRIES:
+                    delay = BACKOFF_BASE * (2**attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                raise
+            except httpx.ConnectError:
+                raise
+        raise last_exc  # type: ignore[misc]
+
     async def get(self, url: str, **kwargs: Any) -> httpx.Response:
-        await self._rate_limiter.acquire()
-        return await self._client.get(url, **kwargs)
+        return await self._request_with_retry("GET", url, **kwargs)
 
     async def head(self, url: str, **kwargs: Any) -> httpx.Response:
-        await self._rate_limiter.acquire()
-        return await self._client.head(url, **kwargs)
+        return await self._request_with_retry("HEAD", url, **kwargs)
 
     async def close(self) -> None:
         await self._client.aclose()

@@ -22,9 +22,25 @@
         </div>
     </div>
 
+    {# ── Inhaltsverzeichnis ── #}
+    <nav class="toc">
+        <h2>Inhalt</h2>
+        <ul>
+            {% if report.scores %}<li><a href="#scores">Bewertung</a></li>{% endif %}
+            <li><a href="#summary">Zusammenfassung</a></li>
+            {% set toc_categories = [] %}
+            {% for result in report.results if result.findings %}
+            {% if result.kategorie not in toc_categories %}
+            {% if toc_categories.append(result.kategorie) %}{% endif %}
+            <li><a href="#cat-{{ result.kategorie|lower|replace(' ', '-') }}">{{ result.kategorie }}</a></li>
+            {% endif %}
+            {% endfor %}
+        </ul>
+    </nav>
+
     {# ── Scores ── #}
     {% if report.scores %}
-    <h2>Bewertung</h2>
+    <h2 id="scores">Bewertung</h2>
     <div class="scores">
         {% if 'Gesamt' in report.scores %}
         {% set gs = report.scores['Gesamt'] %}
@@ -47,7 +63,7 @@
     {# ── Zusammenfassung ── #}
     {% set findings = report.all_findings %}
     {% if findings %}
-    <h2>Zusammenfassung</h2>
+    <h2 id="summary">Zusammenfassung</h2>
     <div class="summary">
         {% for sev, items in report.findings_by_severity.items() %}
         <div class="summary-badge badge-{{ sev.value|lower }}">
@@ -57,16 +73,27 @@
     </div>
     {% endif %}
 
+    {# ── Severity-Filter ── #}
+    <div class="filter-bar no-print">
+        <span class="filter-label">Filter:</span>
+        <button class="filter-btn active" data-severity="all" onclick="filterFindings('all')">Alle</button>
+        <button class="filter-btn" data-severity="kritisch" onclick="filterFindings('kritisch')">KRITISCH</button>
+        <button class="filter-btn" data-severity="hoch" onclick="filterFindings('hoch')">HOCH</button>
+        <button class="filter-btn" data-severity="mittel" onclick="filterFindings('mittel')">MITTEL</button>
+        <button class="filter-btn" data-severity="niedrig" onclick="filterFindings('niedrig')">NIEDRIG</button>
+        <button class="filter-btn" data-severity="info" onclick="filterFindings('info')">INFO</button>
+    </div>
+
     {# ── Findings nach Kategorie ── #}
     {% set categories_seen = [] %}
     {% for result in report.results if result.findings %}
     {% if result.kategorie not in categories_seen %}
     {% if categories_seen.append(result.kategorie) %}{% endif %}
-    <div class="section">
+    <div class="section" id="cat-{{ result.kategorie|lower|replace(' ', '-') }}">
         <h2>{{ result.kategorie }}</h2>
         {% for r in report.results if r.kategorie == result.kategorie %}
         {% for f in r.findings %}
-        <div class="finding finding-{{ f.severity.value|lower }}">
+        <div class="finding finding-{{ f.severity.value|lower }}" data-severity="{{ f.severity.value|lower }}">
             <div class="finding-header">
                 <span class="severity-tag tag-{{ f.severity.value|lower }}">{{ f.severity.value }}</span>
                 <span class="finding-title">{{ f.titel }}</span>
@@ -104,9 +131,19 @@
 
     {# ── Footer ── #}
     <div class="footer">
-        Generiert mit mp-web-audit v0.1.0 | {{ report.zeitstempel.strftime('%d.%m.%Y %H:%M') }}
+        Generiert mit mp-web-audit v{{ report.metadata.tool_version if report.metadata else '0.0.1' }} | {{ report.zeitstempel.strftime('%d.%m.%Y %H:%M') }}
     </div>
 
 </div>
+
+<script>
+function filterFindings(severity) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-severity="' + severity + '"]').classList.add('active');
+    document.querySelectorAll('.finding[data-severity]').forEach(f => {
+        f.style.display = (severity === 'all' || f.dataset.severity === severity) ? '' : 'none';
+    });
+}
+</script>
 </body>
 </html>

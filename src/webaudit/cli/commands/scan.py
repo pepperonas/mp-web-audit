@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from webaudit.core.config import ScanConfig
+from webaudit.cli.common import build_config, check_fail_on
 from webaudit.core.exceptions import AuthorizationError
 
 console = Console()
@@ -68,6 +68,14 @@ def scan_cmd(
         "php,html,js,txt,bak", "--extensions", help="Datei-Erweiterungen"
     ),
     verbose: bool = typer.Option(False, "-v", "--verbose", help="Ausfuehrliche Ausgabe"),
+    fail_on: Optional[str] = typer.Option(
+        None,
+        "--fail-on",
+        help="Exit-Code 1 bei Findings >= Severity (KRITISCH|HOCH|MITTEL|NIEDRIG)",
+    ),
+    quiet: bool = typer.Option(False, "-q", "--quiet", help="Keine Terminal-Ausgabe"),
+    json_stdout: bool = typer.Option(False, "--json-stdout", help="JSON-Report nach stdout"),
+    weights: Optional[str] = typer.Option(None, "--weights", help="Score-Gewichtung als JSON"),
 ) -> None:
     """Fuehrt ein Vollaudit durch (alle Scanner)."""
     auth_time = _show_authorization_prompt(
@@ -77,14 +85,15 @@ def scan_cmd(
         discovery=not skip_discovery,
     )
 
-    config = ScanConfig(
-        target_url=url,
-        output_dir=output,
-        formats=[f.strip() for f in formats.split(",")],
+    config = build_config(
+        url=url,
+        categories=["web", "security", "techstack", "discovery"],
+        output=output,
+        formats=formats,
         timeout=timeout,
         rate_limit=rate_limit,
-        user_agent=user_agent or "mp-web-audit/0.0.1",
-        verify_ssl=not no_verify_ssl,
+        user_agent=user_agent,
+        no_verify_ssl=no_verify_ssl,
         skip_ssl=skip_ssl,
         skip_ports=skip_ports,
         skip_discovery=skip_discovery,
@@ -92,11 +101,15 @@ def scan_cmd(
         wordlist=wordlist,
         extensions=extensions,
         verbose=verbose,
-        categories=["web", "security", "techstack", "discovery"],
+        fail_on=fail_on,
+        quiet=quiet,
+        json_stdout=json_stdout,
+        weights=weights,
     )
 
     from webaudit.orchestrator import run_audit
 
-    asyncio.run(
+    report = asyncio.run(
         run_audit(config, scan_typ="Vollaudit", console=console, autorisierung_zeit=auth_time)
     )
+    check_fail_on(report, fail_on)

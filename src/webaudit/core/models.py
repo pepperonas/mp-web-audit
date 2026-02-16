@@ -74,6 +74,15 @@ class AutorisierungInfo(BaseModel):
     scan_typ: str
 
 
+class ScanMetadata(BaseModel):
+    """Metadaten zum Scan-Durchlauf."""
+
+    tool_version: str = ""
+    python_version: str = ""
+    scan_config: dict[str, Any] = Field(default_factory=dict)
+    scanner_scores: dict[str, float] = Field(default_factory=dict)
+
+
 class AuditReport(BaseModel):
     """Kompletter Audit-Report."""
 
@@ -83,6 +92,7 @@ class AuditReport(BaseModel):
     results: list[ScanResult] = Field(default_factory=list)
     scores: dict[str, float] = Field(default_factory=dict)
     autorisierung: AutorisierungInfo | None = None
+    metadata: ScanMetadata | None = None
 
     @property
     def all_findings(self) -> list[Finding]:

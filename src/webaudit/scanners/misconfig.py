@@ -1,7 +1,8 @@
-"""Fehlkonfigurations-Scanner: Exponierte Dateien und Admin-Panels."""
+"""Fehlkonfigurations-Scanner: Exponierte Dateien und Admin-Panels mit Content-Validierung."""
 
 from __future__ import annotations
 
+import asyncio
 from urllib.parse import urljoin
 
 import httpx
@@ -17,18 +18,21 @@ SENSITIVE_PATHS: list[dict] = [
         "titel": ".env-Datei exponiert",
         "severity": Severity.KRITISCH,
         "beschreibung": "Die .env-Datei enthaelt haeufig Passwoerter und API-Keys.",
+        "validate": lambda text: "=" in text,
     },
     {
         "path": "/.git/HEAD",
         "titel": "Git-Repository exponiert",
         "severity": Severity.KRITISCH,
         "beschreibung": "Das .git-Verzeichnis ist offen. Angreifer koennen den kompletten Quellcode herunterladen.",
+        "validate": lambda text: text.strip().startswith("ref:"),
     },
     {
         "path": "/.git/config",
         "titel": "Git-Konfiguration exponiert",
         "severity": Severity.KRITISCH,
         "beschreibung": "Die Git-Konfiguration ist zugaenglich und kann Repository-URLs und Zugangsdaten enthalten.",
+        "validate": lambda text: "[core]" in text.lower(),
     },
     {
         "path": "/.htaccess",
@@ -41,6 +45,56 @@ SENSITIVE_PATHS: list[dict] = [
         "titel": ".htpasswd exponiert",
         "severity": Severity.KRITISCH,
         "beschreibung": "Die .htpasswd-Datei enthaelt gehashte Passwoerter.",
+    },
+    {
+        "path": "/.DS_Store",
+        "titel": ".DS_Store exponiert",
+        "severity": Severity.NIEDRIG,
+        "beschreibung": "Eine macOS .DS_Store Datei gibt Verzeichnisstruktur-Informationen preis.",
+    },
+    {
+        "path": "/.svn/entries",
+        "titel": "SVN-Repository exponiert",
+        "severity": Severity.HOCH,
+        "beschreibung": "Das .svn-Verzeichnis ist zugaenglich und kann Quellcode offenlegen.",
+    },
+    {
+        "path": "/.idea/workspace.xml",
+        "titel": "IntelliJ-Konfiguration exponiert",
+        "severity": Severity.NIEDRIG,
+        "beschreibung": "IntelliJ/JetBrains Projekt-Konfiguration ist oeffentlich zugaenglich.",
+    },
+    {
+        "path": "/.vscode/settings.json",
+        "titel": "VS Code-Konfiguration exponiert",
+        "severity": Severity.NIEDRIG,
+        "beschreibung": "VS Code Projekt-Einstellungen sind oeffentlich zugaenglich.",
+    },
+    {
+        "path": "/package.json",
+        "titel": "package.json exponiert",
+        "severity": Severity.MITTEL,
+        "beschreibung": "Die package.json gibt Abhaengigkeiten und Version preis.",
+        "validate": lambda text: '"dependencies"' in text or '"name"' in text,
+    },
+    {
+        "path": "/composer.json",
+        "titel": "composer.json exponiert",
+        "severity": Severity.MITTEL,
+        "beschreibung": "Die composer.json gibt PHP-Abhaengigkeiten preis.",
+        "validate": lambda text: '"require"' in text or '"name"' in text,
+    },
+    {
+        "path": "/web.config",
+        "titel": "web.config exponiert",
+        "severity": Severity.MITTEL,
+        "beschreibung": "Die IIS web.config kann sensible Konfiguration enthalten.",
+    },
+    {
+        "path": "/.dockerenv",
+        "titel": "Docker-Umgebung erkannt",
+        "severity": Severity.INFO,
+        "beschreibung": "Die Anwendung laeuft in einem Docker-Container.",
     },
     {
         "path": "/wp-config.php.bak",
@@ -132,38 +186,49 @@ class MisconfigScanner(BaseScanner):
     async def scan(self, context: ScanContext) -> ScanResult:
         findings: list[Finding] = []
         exposed: list[str] = []
-        checked: list[str] = []
         base_url = context.target_url.rstrip("/")
 
-        for entry in SENSITIVE_PATHS:
+        async def check_path(entry: dict) -> Finding | None:
             url = urljoin(base_url + "/", entry["path"].lstrip("/"))
-            checked.append(entry["path"])
             try:
                 resp = await self.http.get(url)
-                # Nur als gefunden werten wenn 200 und nicht leere / Fehlerseite
                 if resp.status_code == 200 and len(resp.text) > 0:
-                    # Einfache Heuristik: bei HTML-Seiten mit <title>404 o.ae. ignorieren
+                    # HTML-404-Seiten filtern
                     if "text/html" in resp.headers.get("content-type", ""):
                         text_lower = resp.text.lower()
                         if any(
                             kw in text_lower
                             for kw in ["404", "not found", "page not found", "seite nicht gefunden"]
                         ):
-                            continue
+                            return None
+
+                    # Content-Validierung falls definiert
+                    validator = entry.get("validate")
+                    if validator and not validator(resp.text):
+                        return None
+
                     exposed.append(entry["path"])
-                    findings.append(
-                        Finding(
-                            scanner=self.name,
-                            kategorie="Sicherheit",
-                            titel=entry["titel"],
-                            severity=entry["severity"],
-                            beschreibung=entry["beschreibung"],
-                            beweis=f"URL: {url} - Status: {resp.status_code}, Groesse: {len(resp.text)} Bytes",
-                            empfehlung="Zugriff auf diese Ressource blockieren (z.B. via .htaccess oder Webserver-Konfiguration).",
-                        )
+                    return Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel=entry["titel"],
+                        severity=entry["severity"],
+                        beschreibung=entry["beschreibung"],
+                        beweis=f"URL: {url} - Status: {resp.status_code}, Groesse: {len(resp.text)} Bytes",
+                        empfehlung="Zugriff auf diese Ressource blockieren (z.B. via .htaccess oder Webserver-Konfiguration).",
                     )
             except httpx.HTTPError:
-                continue
+                pass
+            return None
+
+        # Parallele Pruefung aller Pfade
+        results = await asyncio.gather(
+            *(check_path(entry) for entry in SENSITIVE_PATHS),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Finding):
+                findings.append(result)
 
         if not exposed:
             findings.append(
@@ -172,7 +237,7 @@ class MisconfigScanner(BaseScanner):
                     kategorie="Sicherheit",
                     titel="Keine exponierten Dateien gefunden",
                     severity=Severity.INFO,
-                    beschreibung=f"{len(checked)} Pfade geprueft - keine sensiblen Dateien exponiert.",
+                    beschreibung=f"{len(SENSITIVE_PATHS)} Pfade geprueft - keine sensiblen Dateien exponiert.",
                     empfehlung="",
                 )
             )
@@ -182,7 +247,7 @@ class MisconfigScanner(BaseScanner):
             kategorie="Sicherheit",
             findings=findings,
             raw_data={
-                "paths_checked": len(checked),
+                "paths_checked": len(SENSITIVE_PATHS),
                 "paths_exposed": exposed,
             },
         )

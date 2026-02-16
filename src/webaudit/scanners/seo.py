@@ -1,7 +1,8 @@
-"""SEO-Scanner: Meta-Tags, Headings, OG, robots.txt, sitemap.xml."""
+"""SEO-Scanner: Meta-Tags, Headings, OG, robots.txt, sitemap.xml, Structured Data, hreflang."""
 
 from __future__ import annotations
 
+import json as json_module
 from urllib.parse import urljoin
 
 import httpx
@@ -63,6 +64,22 @@ class SeoScanner(BaseScanner):
                     severity=Severity.MITTEL,
                     beschreibung="Die Seite hat keine Meta-Description.",
                     empfehlung="Eine Meta-Description mit 150-160 Zeichen setzen.",
+                )
+            )
+
+        # robots meta
+        robots_meta = soup.find("meta", attrs={"name": "robots"}) if soup else None
+        robots_content = robots_meta.get("content", "").lower() if robots_meta else ""
+        if "noindex" in robots_content:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="SEO",
+                    titel="Seite ist als noindex markiert",
+                    severity=Severity.HOCH,
+                    beschreibung="Die Seite hat ein meta robots noindex-Tag. Sie wird nicht indexiert.",
+                    beweis=f'<meta name="robots" content="{robots_content}">',
+                    empfehlung="noindex entfernen, falls die Seite in Suchmaschinen erscheinen soll.",
                 )
             )
 
@@ -141,13 +158,71 @@ class SeoScanner(BaseScanner):
                 )
             )
 
+        # Structured Data (JSON-LD)
+        json_ld_scripts = soup.find_all("script", type="application/ld+json") if soup else []
+        has_structured_data = False
+        for script in json_ld_scripts:
+            try:
+                json_module.loads(script.string or "")
+                has_structured_data = True
+            except (json_module.JSONDecodeError, TypeError):
+                pass
+        raw["has_structured_data"] = has_structured_data
+        if not has_structured_data:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="SEO",
+                    titel="Structured Data fehlt",
+                    severity=Severity.NIEDRIG,
+                    beschreibung="Keine Schema.org/JSON-LD Structured Data gefunden.",
+                    empfehlung="JSON-LD Structured Data hinzufuegen (z.B. Organization, WebPage).",
+                )
+            )
+
+        # hreflang
+        hreflang_tags = soup.find_all("link", hreflang=True) if soup else []
+        raw["has_hreflang"] = len(hreflang_tags) > 0
+        if lang and not hreflang_tags:
+            # Nur hinweisen wenn Sprache gesetzt ist (deutet auf i18n-Bewusstsein hin)
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="SEO",
+                    titel="hreflang-Tags fehlen",
+                    severity=Severity.INFO,
+                    beschreibung="Keine hreflang-Tags gefunden. Bei mehrsprachigen Seiten empfohlen.",
+                    empfehlung="hreflang-Tags setzen falls die Seite in mehreren Sprachen existiert.",
+                )
+            )
+
         # robots.txt
         base_url = context.target_url.rstrip("/")
         robots_url = urljoin(base_url + "/", "robots.txt")
         try:
             resp = await self.http.get(robots_url)
             raw["has_robots_txt"] = resp.status_code == 200
-            if resp.status_code != 200:
+            if resp.status_code == 200:
+                robots_text = resp.text
+                # robots.txt Inhalt analysieren
+                if "disallow: /" in robots_text.lower():
+                    lines = robots_text.lower().split("\n")
+                    for line in lines:
+                        stripped = line.strip()
+                        if stripped == "disallow: /":
+                            findings.append(
+                                Finding(
+                                    scanner=self.name,
+                                    kategorie="SEO",
+                                    titel="robots.txt blockiert gesamte Seite",
+                                    severity=Severity.HOCH,
+                                    beschreibung='robots.txt enthaelt "Disallow: /" - die gesamte Seite ist fuer Crawler gesperrt.',
+                                    beweis="Disallow: /",
+                                    empfehlung="Disallow-Regel anpassen, um Crawling zu ermoeglichen.",
+                                )
+                            )
+                            break
+            else:
                 findings.append(
                     Finding(
                         scanner=self.name,

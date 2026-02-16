@@ -1,4 +1,4 @@
-"""Security-Headers-Scanner."""
+"""Security-Headers-Scanner mit CSP-Analyse und CORS-Pruefung."""
 
 from __future__ import annotations
 
@@ -45,6 +45,8 @@ EXPECTED_HEADERS: dict[str, dict] = {
     },
 }
 
+CSP_UNSAFE_DIRECTIVES = ["'unsafe-inline'", "'unsafe-eval'"]
+
 
 @register_scanner
 class HeadersScanner(BaseScanner):
@@ -75,7 +77,69 @@ class HeadersScanner(BaseScanner):
                     )
                 )
 
-        # Pruefen ob Server-Header unnoetige Infos preisgibt
+        # CSP-Staerke pruefen wenn vorhanden
+        csp_value = headers_lower.get("content-security-policy", "")
+        if csp_value:
+            csp_lower = csp_value.lower()
+            csp_issues = []
+
+            for directive in CSP_UNSAFE_DIRECTIVES:
+                if directive in csp_lower:
+                    csp_issues.append(directive)
+
+            # Wildcard in script-src
+            if "script-src" in csp_lower:
+                script_part = csp_lower.split("script-src")[1].split(";")[0]
+                if " * " in f" {script_part} " or script_part.strip() == "*":
+                    csp_issues.append("Wildcard (*) in script-src")
+
+            if csp_issues:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel="CSP ist zu permissiv",
+                        severity=Severity.MITTEL,
+                        beschreibung=f"Die Content-Security-Policy enthaelt unsichere Direktiven: {', '.join(csp_issues)}",
+                        beweis=f"CSP: {csp_value[:200]}",
+                        empfehlung="unsafe-inline und unsafe-eval entfernen, Nonces oder Hashes verwenden.",
+                    )
+                )
+
+        # CORS pruefen
+        cors_origin = headers_lower.get("access-control-allow-origin", "")
+        if cors_origin == "*":
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Sicherheit",
+                    titel="CORS erlaubt alle Origins",
+                    severity=Severity.MITTEL,
+                    beschreibung="Access-Control-Allow-Origin ist auf * gesetzt. Jede Domain kann Anfragen stellen.",
+                    beweis=f"Access-Control-Allow-Origin: {cors_origin}",
+                    empfehlung="CORS auf spezifische, vertrauenswuerdige Origins beschraenken.",
+                )
+            )
+
+        # Cache-Control bei Seiten mit Cookies
+        has_set_cookie = "set-cookie" in headers_lower
+        cache_control = headers_lower.get("cache-control", "")
+        if has_set_cookie and cache_control:
+            cc_lower = cache_control.lower()
+            if "public" in cc_lower and "no-store" not in cc_lower:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel="Cache-Control bei authentifizierten Seiten zu permissiv",
+                        severity=Severity.MITTEL,
+                        beschreibung="Die Seite setzt Cookies, aber Cache-Control erlaubt oeffentliches Caching.",
+                        beweis=f"Cache-Control: {cache_control}",
+                        empfehlung="Cache-Control: no-store, no-cache, private setzen bei Seiten mit Cookies.",
+                    )
+                )
+
+        # Server-Version pruefen
         server = headers_lower.get("server", "")
         if server and any(v in server.lower() for v in ["apache/", "nginx/", "iis/"]):
             findings.append(

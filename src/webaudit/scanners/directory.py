@@ -6,11 +6,15 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from webaudit.core.base_scanner import BaseScanner
 from webaudit.core.models import Finding, ScanContext, ScanResult, Severity
 from webaudit.scanners import register_scanner
 
 DEFAULT_WORDLIST = Path(__file__).parent.parent.parent.parent / "wordlists" / "common.txt"
+DISCOVERY_CONCURRENCY = 50
+DISCOVERY_TIMEOUT = 5.0
 
 
 @register_scanner
@@ -18,6 +22,18 @@ class DirectoryScanner(BaseScanner):
     name = "directory"
     description = "Verzeichnis-/Datei-Enumeration via Wordlist"
     category = "discovery"
+
+    def _create_fast_client(self) -> httpx.AsyncClient:
+        """Eigener schneller Client fuer Discovery (umgeht Rate-Limiter)."""
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(DISCOVERY_TIMEOUT),
+            follow_redirects=True,
+            verify=self.config.verify_ssl,
+            headers={"User-Agent": self.config.user_agent},
+            limits=httpx.Limits(
+                max_connections=DISCOVERY_CONCURRENCY, max_keepalive_connections=30
+            ),
+        )
 
     async def scan(self, context: ScanContext) -> ScanResult:
         findings: list[Finding] = []
@@ -45,28 +61,20 @@ class DirectoryScanner(BaseScanner):
                 all_paths.append(f"{path}.{ext}")
 
         base_url = context.target_url.rstrip("/")
-        discovered: list[dict[str, Any]] = []
-        semaphore = asyncio.Semaphore(self.config.rate_limit)
+        semaphore = asyncio.Semaphore(DISCOVERY_CONCURRENCY)
 
-        async def check_path(path: str) -> dict[str, Any] | None:
-            url = f"{base_url}/{path.lstrip('/')}"
-            async with semaphore:
-                try:
-                    resp = await self.http.get(url)
-                    if resp.status_code in (200, 301, 302, 403):
-                        content_length = len(resp.text) if hasattr(resp, "text") else 0
-                        return {
-                            "url": url,
-                            "status": resp.status_code,
-                            "content_length": content_length,
-                        }
-                except Exception:
-                    pass
-            return None
+        # Schnellen Client fuer Discovery verwenden, Fallback auf self.http
+        use_fast_client = hasattr(self.http, "_client")
+        if use_fast_client:
+            client = self._create_fast_client()
+        else:
+            client = None
 
-        tasks = [check_path(p) for p in all_paths]
-        results = await asyncio.gather(*tasks)
-        discovered = [r for r in results if r is not None]
+        try:
+            discovered = await self._discover_paths(base_url, all_paths, semaphore, client)
+        finally:
+            if client:
+                await client.aclose()
 
         raw: dict[str, Any] = {
             "wordlist": str(wordlist),
@@ -126,3 +134,34 @@ class DirectoryScanner(BaseScanner):
             findings=findings,
             raw_data=raw,
         )
+
+    async def _discover_paths(
+        self,
+        base_url: str,
+        all_paths: list[str],
+        semaphore: asyncio.Semaphore,
+        fast_client: httpx.AsyncClient | None,
+    ) -> list[dict[str, Any]]:
+        async def check_path(path: str) -> dict[str, Any] | None:
+            url = f"{base_url}/{path.lstrip('/')}"
+            async with semaphore:
+                try:
+                    if fast_client:
+                        resp = await fast_client.head(url)
+                        content_length = int(resp.headers.get("content-length", 0))
+                    else:
+                        resp = await self.http.head(url)
+                        content_length = int(getattr(resp, "headers", {}).get("content-length", 0))
+                    if resp.status_code in (200, 301, 302, 403):
+                        return {
+                            "url": url,
+                            "status": resp.status_code,
+                            "content_length": content_length,
+                        }
+                except Exception:
+                    pass
+            return None
+
+        tasks = [check_path(p) for p in all_paths]
+        results = await asyncio.gather(*tasks)
+        return [r for r in results if r is not None]

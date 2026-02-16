@@ -1,11 +1,11 @@
-"""Score-Berechnung (0-100) pro Kategorie."""
+"""Score-Berechnung (0-100) pro Kategorie mit konfigurierbarer Gewichtung."""
 
 from __future__ import annotations
 
 from webaudit.core.models import AuditReport, Severity
 
 
-# Gewichtung der Kategorien fuer den Gesamt-Score
+# Standard-Gewichtung der Kategorien fuer den Gesamt-Score
 CATEGORY_WEIGHTS: dict[str, float] = {
     "Performance": 0.15,
     "SEO": 0.15,
@@ -39,6 +39,10 @@ def _score_from_raw_data(scanner_name: str, raw_data: dict) -> float | None:
 
         redirects = raw_data.get("redirect_count", 0)
         score -= min(redirects * 5, 20)
+
+        if not raw_data.get("has_compression", True):
+            score -= 10
+
         return max(0.0, score)
 
     if scanner_name == "seo":
@@ -118,12 +122,18 @@ SCANNER_TO_CATEGORY: dict[str, str] = {
     "ssl_scanner": "Sicherheit",
     "ports": "Sicherheit",
     "misconfig": "Sicherheit",
+    "redirect": "Sicherheit",
+    "dns": "Sicherheit",
     "techstack": "Techstack",
 }
 
 
-def calculate_scores(report: AuditReport) -> dict[str, float]:
+def calculate_scores(
+    report: AuditReport,
+    custom_weights: dict[str, float] | None = None,
+) -> dict[str, float]:
     """Berechnet Scores pro Kategorie und den Gesamt-Score."""
+    weights = custom_weights or CATEGORY_WEIGHTS
     category_scores: dict[str, list[float]] = {}
 
     for result in report.results:
@@ -144,6 +154,8 @@ def calculate_scores(report: AuditReport) -> dict[str, float]:
     }
 
     for result in report.results:
+        if not result.success:
+            continue
         cat = SCANNER_TO_CATEGORY.get(result.scanner_name, "Sonstiges")
         if cat not in category_scores:
             base = 100.0
@@ -160,7 +172,7 @@ def calculate_scores(report: AuditReport) -> dict[str, float]:
         weighted_sum = 0.0
         weight_sum = 0.0
         for cat, s in scores.items():
-            w = CATEGORY_WEIGHTS.get(cat, 0.1)
+            w = weights.get(cat, 0.1)
             weighted_sum += s * w
             weight_sum += w
         if weight_sum > 0:
