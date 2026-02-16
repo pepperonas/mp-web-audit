@@ -354,11 +354,12 @@ async def _try_connect(
 
     # Alle Strategien fehlgeschlagen
     if not config.quiet:
+        resolved_ip = _resolve_ip(target_url)
+        ip_hint = f" (IP: {resolved_ip})" if resolved_ip else ""
         console.print(
             f"[red]Ziel nicht erreichbar:[/red] {hostname} antwortet auf keinem Port "
-            f"(80, 443, 8080, 8443).\n"
-            f"[red]Moeglich:[/red] Server offline, Firewall blockiert, DNS falsch "
-            f"(IP: {parsed.hostname})"
+            f"(80, 443, 8080, 8443).{ip_hint}\n"
+            f"[red]Moeglich:[/red] Server offline, Firewall blockiert, DNS falsch."
         )
     return None
 

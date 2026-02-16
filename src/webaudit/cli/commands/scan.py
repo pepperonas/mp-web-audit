@@ -50,8 +50,9 @@ def _show_authorization_prompt(
     console.print(Panel("\n".join(info_lines), border_style="red"))
 
     antwort = typer.prompt(
-        "Haben Sie die ausdrueckliche Genehmigung, dieses Ziel zu scannen? [j/N]",
+        "Haben Sie die ausdrueckliche Genehmigung, dieses Ziel zu scannen? (j/N)",
         default="N",
+        show_default=False,
     )
     if antwort.lower() not in ("j", "ja", "y", "yes"):
         raise AuthorizationError("Autorisierung verweigert. Scan abgebrochen.")
