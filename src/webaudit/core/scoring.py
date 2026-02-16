@@ -125,6 +125,10 @@ SCANNER_TO_CATEGORY: dict[str, str] = {
     "redirect": "Sicherheit",
     "dns": "Sicherheit",
     "techstack": "Techstack",
+    "info_disclosure": "Sicherheit",
+    "injection": "Sicherheit",
+    "subdomain": "Sicherheit",
+    "directory": "Sicherheit",
 }
 
 
@@ -132,19 +136,17 @@ def calculate_scores(
     report: AuditReport,
     custom_weights: dict[str, float] | None = None,
 ) -> dict[str, float]:
-    """Berechnet Scores pro Kategorie und den Gesamt-Score."""
+    """Berechnet Scores pro Kategorie und den Gesamt-Score.
+
+    Unified Scoring: Jeder Scanner traegt zu seinem Kategorie-Score bei.
+    1. Zuerst raw_data-basiertes Scoring versuchen
+    2. Wenn None -> Severity-basierter Abzug als Fallback
+    3. Alle Scores pro Kategorie mitteln
+    """
     weights = custom_weights or CATEGORY_WEIGHTS
     category_scores: dict[str, list[float]] = {}
+    scanner_scores: dict[str, float] = {}
 
-    for result in report.results:
-        if not result.success:
-            continue
-        score = _score_from_raw_data(result.scanner_name, result.raw_data)
-        if score is not None:
-            cat = SCANNER_TO_CATEGORY.get(result.scanner_name, "Sonstiges")
-            category_scores.setdefault(cat, []).append(score)
-
-    # Severity-basierter Abzug fuer Kategorien ohne raw_data-Score
     severity_penalty = {
         Severity.KRITISCH: 25,
         Severity.HOCH: 15,
@@ -157,11 +159,23 @@ def calculate_scores(
         if not result.success:
             continue
         cat = SCANNER_TO_CATEGORY.get(result.scanner_name, "Sonstiges")
-        if cat not in category_scores:
-            base = 100.0
+
+        # Zuerst raw_data-basiertes Scoring versuchen
+        score = _score_from_raw_data(result.scanner_name, result.raw_data)
+
+        # Fallback: Severity-basierter Abzug
+        if score is None:
+            score = 100.0
             for finding in result.findings:
-                base -= severity_penalty.get(finding.severity, 0)
-            category_scores.setdefault(cat, []).append(max(0.0, base))
+                score -= severity_penalty.get(finding.severity, 0)
+            score = max(0.0, score)
+
+        scanner_scores[result.scanner_name] = score
+        category_scores.setdefault(cat, []).append(score)
+
+    # Per-Scanner Scores in Report-Metadata speichern
+    if report.metadata:
+        report.metadata.scanner_scores = scanner_scores
 
     scores: dict[str, float] = {}
     for cat, values in category_scores.items():

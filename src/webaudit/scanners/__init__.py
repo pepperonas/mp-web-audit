@@ -33,6 +33,8 @@ def discover_scanners() -> None:
         directory,
         dns_scanner,
         headers,
+        info_disclosure,
+        injection,
         misconfig,
         mobile,
         performance,
@@ -40,6 +42,7 @@ def discover_scanners() -> None:
         redirect,
         seo,
         ssl_scanner,
+        subdomain,
         techstack,
         usability,
     )

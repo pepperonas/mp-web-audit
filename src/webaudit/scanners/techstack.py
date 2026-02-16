@@ -102,6 +102,50 @@ class TechstackScanner(BaseScanner):
                 if "ASP.NET" not in detected["other"]:
                     detected["other"].append("ASP.NET")
 
+        # WAF/CDN Erkennung (Header-basiert)
+        waf_cdn_headers: dict[str, str] = {
+            "cf-ray": "Cloudflare",
+            "cf-cache-status": "Cloudflare",
+            "x-amz-cf-id": "AWS CloudFront",
+            "x-amz-cf-pop": "AWS CloudFront",
+            "x-vercel-id": "Vercel",
+            "x-vercel-cache": "Vercel",
+            "x-netlify-request-id": "Netlify",
+            "x-served-by": "Fastly",
+            "x-cache": "CDN",
+            "x-sucuri-id": "Sucuri WAF",
+            "x-akamai-transformed": "Akamai",
+            "x-cdn": "CDN",
+        }
+        detected_waf_cdn: list[str] = []
+        for header, service in waf_cdn_headers.items():
+            if header in headers_lower:
+                if service not in detected_waf_cdn:
+                    detected_waf_cdn.append(service)
+        if detected_waf_cdn:
+            detected["other"].extend([f"WAF/CDN: {s}" for s in detected_waf_cdn])
+
+        # Analytics Erkennung (Body-basiert)
+        analytics_patterns: dict[str, str] = {
+            "google-analytics.com/analytics": "Google Analytics",
+            "googletagmanager.com": "Google Tag Manager",
+            "gtag('config'": "Google Analytics (gtag)",
+            "ga('create'": "Google Analytics (ga.js)",
+            "connect.facebook.net": "Facebook Pixel",
+            "hotjar.com": "Hotjar",
+            "matomo": "Matomo/Piwik",
+            "plausible.io": "Plausible Analytics",
+            "umami.is": "Umami Analytics",
+            "clarity.ms": "Microsoft Clarity",
+        }
+        detected_analytics: list[str] = []
+        for pattern, name in analytics_patterns.items():
+            if pattern in body:
+                if name not in detected_analytics:
+                    detected_analytics.append(name)
+        if detected_analytics:
+            detected["other"].extend([f"Analytics: {a}" for a in detected_analytics])
+
         # Zusammenfassung als Findings
         all_tech = []
         for category, items in detected.items():

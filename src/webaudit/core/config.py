@@ -15,7 +15,7 @@ class ScanConfig:
     formats: list[str] = field(default_factory=lambda: ["html", "json", "terminal"])
     timeout: float = 10.0
     rate_limit: int = 10
-    user_agent: str = "mp-web-audit/0.1.0"
+    user_agent: str = "mp-web-audit/0.2.0"
     verify_ssl: bool = True
     skip_ssl: bool = False
     skip_ports: bool = False
@@ -33,3 +33,12 @@ class ScanConfig:
     json_stdout: bool = False
     # Score-Gewichtung
     scoring_weights: dict[str, float] | None = None
+    # Logging
+    log_file: str | None = None
+    # Per-Scanner Timeout
+    scanner_timeout: float = 60.0
+    # Proxy
+    proxy_url: str | None = None
+    # Auth
+    auth_header: str | None = None
+    auth_cookie: str | None = None

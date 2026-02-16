@@ -33,16 +33,42 @@ class AuditHttpClient:
     def __init__(self, config: ScanConfig) -> None:
         self.config = config
         self._rate_limiter = RateLimiter(config.rate_limit)
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(config.timeout),
-            follow_redirects=True,
-            verify=config.verify_ssl,
-            headers={"User-Agent": config.user_agent},
-            limits=httpx.Limits(
+
+        # Default-Headers bauen
+        headers = {"User-Agent": config.user_agent}
+        if config.auth_header:
+            # Format: "Authorization: Bearer token123" oder "X-API-Key: abc"
+            if ":" in config.auth_header:
+                key, value = config.auth_header.split(":", 1)
+                headers[key.strip()] = value.strip()
+            else:
+                headers["Authorization"] = config.auth_header
+
+        # Cookies bauen
+        cookies = None
+        if config.auth_cookie:
+            cookies = {}
+            for part in config.auth_cookie.split(";"):
+                if "=" in part:
+                    k, v = part.strip().split("=", 1)
+                    cookies[k.strip()] = v.strip()
+
+        client_kwargs: dict[str, Any] = {
+            "timeout": httpx.Timeout(config.timeout),
+            "follow_redirects": True,
+            "verify": config.verify_ssl,
+            "headers": headers,
+            "limits": httpx.Limits(
                 max_connections=50,
                 max_keepalive_connections=20,
             ),
-        )
+        }
+        if config.proxy_url:
+            client_kwargs["proxy"] = config.proxy_url
+        if cookies:
+            client_kwargs["cookies"] = cookies
+
+        self._client = httpx.AsyncClient(**client_kwargs)
 
     async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         last_exc: Exception | None = None

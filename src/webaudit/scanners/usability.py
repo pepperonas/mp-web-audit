@@ -70,7 +70,7 @@ class UsabilityScanner(BaseScanner):
                 internal_links.append(full_url)
 
         broken: list[str] = []
-        for url in internal_links[:20]:
+        for url in internal_links[:50]:
             try:
                 resp = await self.http.head(url)
                 if resp.status_code >= 400:
@@ -127,6 +127,32 @@ class UsabilityScanner(BaseScanner):
             or soup.find("a", class_=lambda c: c and "skip" in c.lower() if c else False)
         )
         raw["has_skip_link"] = skip_link is not None
+
+        # Heading-Hierarchie pruefen
+        heading_levels = []
+        for level in range(1, 7):
+            tags = soup.find_all(f"h{level}")
+            if tags:
+                heading_levels.append(level)
+        raw["heading_levels"] = heading_levels
+
+        if len(heading_levels) >= 2:
+            gaps = []
+            for i in range(len(heading_levels) - 1):
+                if heading_levels[i + 1] - heading_levels[i] > 1:
+                    gaps.append(f"H{heading_levels[i]} -> H{heading_levels[i + 1]}")
+            if gaps:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Usability",
+                        titel="Heading-Hierarchie nicht korrekt",
+                        severity=Severity.NIEDRIG,
+                        beschreibung=f"Die Heading-Struktur hat Luecken: {', '.join(gaps)}.",
+                        beweis=f"Vorhandene Levels: {', '.join(f'H{lv}' for lv in heading_levels)}",
+                        empfehlung="Headings in logischer Reihenfolge verwenden fuer Barrierefreiheit.",
+                    )
+                )
 
         return ScanResult(
             scanner_name=self.name,

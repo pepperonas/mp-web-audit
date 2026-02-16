@@ -29,6 +29,11 @@ def build_config(
     quiet: bool = False,
     json_stdout: bool = False,
     weights: str | None = None,
+    log_file: str | None = None,
+    scanner_timeout: float = 60.0,
+    proxy: str | None = None,
+    auth_header: str | None = None,
+    auth_cookie: str | None = None,
 ) -> ScanConfig:
     """Baut ScanConfig aus CLI-Parametern."""
     scoring_weights = None
@@ -37,13 +42,18 @@ def build_config(
 
         scoring_weights = json.loads(weights)
 
+    # Logging einrichten
+    from webaudit.core.logging import setup_logging
+
+    setup_logging(verbose=verbose, log_file=log_file)
+
     return ScanConfig(
         target_url=url,
         output_dir=output,
         formats=[f.strip() for f in formats.split(",")],
         timeout=timeout,
         rate_limit=rate_limit,
-        user_agent=user_agent or "mp-web-audit/0.1.0",
+        user_agent=user_agent or "mp-web-audit/0.2.0",
         verify_ssl=not no_verify_ssl,
         skip_ssl=skip_ssl,
         skip_ports=skip_ports,
@@ -57,6 +67,11 @@ def build_config(
         quiet=quiet,
         json_stdout=json_stdout,
         scoring_weights=scoring_weights,
+        log_file=log_file,
+        scanner_timeout=scanner_timeout,
+        proxy_url=proxy,
+        auth_header=auth_header,
+        auth_cookie=auth_cookie,
     )
 
 

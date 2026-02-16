@@ -6,7 +6,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from webaudit.core.models import AuditReport
+from webaudit.core.models import AuditReport, Severity
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -45,6 +45,6 @@ def generate_html_report(report: AuditReport, output_path: Path) -> Path:
     css = (TEMPLATES_DIR / "style.css").read_text()
     template = env.get_template("report.html.j2")
 
-    html = template.render(report=report, css=css)
+    html = template.render(report=report, css=css, severity_enum=Severity)
     output_path.write_text(html, encoding="utf-8")
     return output_path

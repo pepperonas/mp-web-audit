@@ -51,6 +51,9 @@ class Finding(BaseModel):
     beweis: str = ""
     empfehlung: str = ""
     referenzen: list[str] = Field(default_factory=list)
+    cwe_id: str = ""
+    cwe_name: str = ""
+    owasp_category: str = ""
 
 
 class ScanResult(BaseModel):
@@ -109,6 +112,17 @@ class AuditReport(BaseModel):
         for f in self.all_findings:
             result.setdefault(f.severity, []).append(f)
         return result
+
+    def deduplicated_findings(self) -> list[Finding]:
+        """Dedupliziert Findings nach (titel, severity) Tupel."""
+        seen: set[tuple[str, str]] = set()
+        deduped: list[Finding] = []
+        for f in self.all_findings:
+            key = (f.titel, f.severity.value)
+            if key not in seen:
+                seen.add(key)
+                deduped.append(f)
+        return deduped
 
 
 class ScanContext(BaseModel):

@@ -90,6 +90,65 @@ class MobileScanner(BaseScanner):
         else:
             raw["has_text_size_adjust"] = False
 
+        # Font-Size Check (< 12px)
+        small_font_count = 0
+        if soup:
+            import re
+
+            # Inline-Styles mit font-size pruefen
+            elements_with_style = soup.find_all(style=True)
+            for el in elements_with_style:
+                style = el.get("style", "")
+                match = re.search(r"font-size:\s*(\d+)px", style)
+                if match and int(match.group(1)) < 12:
+                    small_font_count += 1
+            # Auch in <style> Tags
+            style_tags = soup.find_all("style")
+            for style_tag in style_tags:
+                content = style_tag.string or ""
+                for match in re.finditer(r"font-size:\s*(\d+)px", content):
+                    if int(match.group(1)) < 12:
+                        small_font_count += 1
+        raw["small_font_count"] = small_font_count
+        if small_font_count > 0:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Mobile",
+                    titel=f"{small_font_count} Element(e) mit zu kleiner Schrift",
+                    severity=Severity.NIEDRIG,
+                    beschreibung=f"{small_font_count} Element(e) haben eine Schriftgroesse unter 12px.",
+                    empfehlung="Mindestens 12px Schriftgroesse fuer mobile Lesbarkeit verwenden.",
+                )
+            )
+
+        # Tap-Target Pruefung (kleine interaktive Elemente)
+        small_tap_targets = 0
+        if soup:
+            import re as re_mod
+
+            for el in soup.find_all(["a", "button", "input"]):
+                style = el.get("style", "")
+                # Inline width/height pruefen
+                w_match = re_mod.search(r"width:\s*(\d+)px", style)
+                h_match = re_mod.search(r"height:\s*(\d+)px", style)
+                if w_match and h_match:
+                    w, h = int(w_match.group(1)), int(h_match.group(1))
+                    if w < 44 or h < 44:
+                        small_tap_targets += 1
+        raw["small_tap_targets"] = small_tap_targets
+        if small_tap_targets > 0:
+            findings.append(
+                Finding(
+                    scanner=self.name,
+                    kategorie="Mobile",
+                    titel=f"{small_tap_targets} zu kleine Tap-Targets",
+                    severity=Severity.NIEDRIG,
+                    beschreibung=f"{small_tap_targets} interaktive Elemente sind kleiner als 44x44px.",
+                    empfehlung="Tap-Targets auf mindestens 44x44px vergroessern (WCAG 2.5.5).",
+                )
+            )
+
         return ScanResult(
             scanner_name=self.name,
             kategorie="Mobile",

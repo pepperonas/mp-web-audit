@@ -104,6 +104,8 @@ class SslScanner(BaseScanner):
                 ScanCommand.TLS_1_3_CIPHER_SUITES,
                 ScanCommand.HEARTBLEED,
                 ScanCommand.ROBOT,
+                ScanCommand.TLS_COMPRESSION,
+                ScanCommand.SESSION_RENEGOTIATION,
             },
         )
 
@@ -240,6 +242,80 @@ class SslScanner(BaseScanner):
                             beschreibung=f"{len(weak_ciphers)} schwache Cipher-Suite(s) erkannt.",
                             beweis=f"Schwache Ciphers: {', '.join(weak_ciphers[:5])}",
                             empfehlung="Schwache Cipher-Suites (RC4, 3DES, CBC) deaktivieren.",
+                        )
+                    )
+
+            # Forward Secrecy pruefen (TLS 1.2 Ciphers ohne ECDHE/DHE)
+            if tls12 and tls12.result and tls12.result.accepted_cipher_suites:
+                no_fs_ciphers = []
+                for cipher in tls12.result.accepted_cipher_suites:
+                    name_upper = cipher.cipher_suite.name.upper()
+                    if "ECDHE" not in name_upper and "DHE" not in name_upper:
+                        no_fs_ciphers.append(cipher.cipher_suite.name)
+                if no_fs_ciphers:
+                    raw["has_no_forward_secrecy"] = True
+                    findings.append(
+                        Finding(
+                            scanner=self.name,
+                            kategorie="Sicherheit",
+                            titel="TLS 1.2 Ciphers ohne Forward Secrecy",
+                            severity=Severity.MITTEL,
+                            beschreibung=f"{len(no_fs_ciphers)} Cipher-Suite(s) ohne ECDHE/DHE (kein Forward Secrecy).",
+                            beweis=f"Ohne FS: {', '.join(no_fs_ciphers[:5])}",
+                            empfehlung="Nur Cipher-Suites mit ECDHE oder DHE Key-Exchange verwenden.",
+                        )
+                    )
+
+            # Signatur-Algorithmus pruefen (SHA-1/MD5)
+            if cert_result and cert_result.result:
+                for deployment in cert_result.result.certificate_deployments:
+                    cert_chain = deployment.received_certificate_chain
+                    if cert_chain:
+                        leaf_cert = cert_chain[0]
+                        sig_algo = leaf_cert.signature_hash_algorithm
+                        if sig_algo and sig_algo.name.lower() in ("sha1", "md5"):
+                            raw["weak_signature"] = sig_algo.name
+                            findings.append(
+                                Finding(
+                                    scanner=self.name,
+                                    kategorie="Sicherheit",
+                                    titel=f"Zertifikat mit schwachem Signatur-Algorithmus ({sig_algo.name})",
+                                    severity=Severity.HOCH,
+                                    beschreibung=f"Das Zertifikat nutzt {sig_algo.name} als Signatur-Algorithmus.",
+                                    beweis=f"Signatur: {sig_algo.name}",
+                                    empfehlung="Zertifikat mit SHA-256 oder staerker neu ausstellen.",
+                                )
+                            )
+
+            # TLS-Komprimierung (CRIME-Angriff)
+            tls_compression = result.scan_result.tls_compression
+            if tls_compression and tls_compression.result:
+                if tls_compression.result.supports_compression:
+                    raw["has_tls_compression"] = True
+                    findings.append(
+                        Finding(
+                            scanner=self.name,
+                            kategorie="Sicherheit",
+                            titel="TLS-Komprimierung aktiviert (CRIME-Angriff)",
+                            severity=Severity.HOCH,
+                            beschreibung="TLS-Komprimierung ist aktiviert, was den CRIME-Angriff ermoeglicht.",
+                            empfehlung="TLS-Komprimierung deaktivieren.",
+                        )
+                    )
+
+            # Session Renegotiation
+            session_reneg = result.scan_result.session_renegotiation
+            if session_reneg and session_reneg.result:
+                if session_reneg.result.is_vulnerable_to_client_renegotiation_dos:
+                    raw["client_renegotiation_vulnerable"] = True
+                    findings.append(
+                        Finding(
+                            scanner=self.name,
+                            kategorie="Sicherheit",
+                            titel="Client-initiierte TLS-Renegotiation moeglich",
+                            severity=Severity.MITTEL,
+                            beschreibung="Der Server erlaubt client-initiierte TLS-Renegotiation (DoS-Risiko).",
+                            empfehlung="Client-initiierte Renegotiation deaktivieren.",
                         )
                     )
 

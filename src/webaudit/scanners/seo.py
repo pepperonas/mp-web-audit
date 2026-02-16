@@ -141,7 +141,35 @@ class SeoScanner(BaseScanner):
                 )
             )
 
-        # Open Graph Tags
+        # Heading-Hierarchie pruefen (H2-H6)
+        if soup:
+            heading_levels = []
+            for level in range(1, 7):
+                tags = soup.find_all(f"h{level}")
+                if tags:
+                    heading_levels.append(level)
+            raw["heading_levels_found"] = heading_levels
+
+            # Luecken in der Hierarchie erkennen (z.B. H1 -> H3 ohne H2)
+            if len(heading_levels) >= 2:
+                gaps = []
+                for i in range(len(heading_levels) - 1):
+                    if heading_levels[i + 1] - heading_levels[i] > 1:
+                        gaps.append(f"H{heading_levels[i]} -> H{heading_levels[i + 1]}")
+                if gaps:
+                    findings.append(
+                        Finding(
+                            scanner=self.name,
+                            kategorie="SEO",
+                            titel="Luecken in der Heading-Hierarchie",
+                            severity=Severity.NIEDRIG,
+                            beschreibung=f"Die Heading-Struktur hat Luecken: {', '.join(gaps)}.",
+                            beweis=f"Vorhandene Levels: {', '.join(f'H{lv}' for lv in heading_levels)}",
+                            empfehlung="Headings in logischer Reihenfolge verwenden (H1 -> H2 -> H3).",
+                        )
+                    )
+
+        # Open Graph Tags - Vollstaendigkeit pruefen
         og_tags = (
             soup.find_all("meta", property=lambda x: x and x.startswith("og:")) if soup else []
         )
@@ -157,6 +185,27 @@ class SeoScanner(BaseScanner):
                     empfehlung="OG-Tags (og:title, og:description, og:image) fuer Social Media setzen.",
                 )
             )
+        else:
+            # Einzelne OG-Tags pruefen
+            og_properties = {tag.get("property", ""): tag.get("content", "") for tag in og_tags}
+            required_og = ["og:title", "og:description", "og:image", "og:type"]
+            missing_og = [
+                p for p in required_og if p not in og_properties or not og_properties.get(p)
+            ]
+            raw["og_properties"] = list(og_properties.keys())
+            raw["og_missing"] = missing_og
+            if missing_og:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="SEO",
+                        titel="Open Graph Tags unvollstaendig",
+                        severity=Severity.NIEDRIG,
+                        beschreibung=f"Folgende OG-Tags fehlen: {', '.join(missing_og)}.",
+                        beweis=f"Vorhandene OG-Tags: {', '.join(og_properties.keys())}",
+                        empfehlung=f"Fehlende OG-Tags setzen: {', '.join(missing_og)}.",
+                    )
+                )
 
         # Structured Data (JSON-LD)
         json_ld_scripts = soup.find_all("script", type="application/ld+json") if soup else []

@@ -71,6 +71,67 @@
         </div>
         {% endfor %}
     </div>
+
+    {# ── Executive Summary ── #}
+    {% set kritisch_count = report.findings_by_severity.get(severity_enum.KRITISCH, [])|length %}
+    {% set hoch_count = report.findings_by_severity.get(severity_enum.HOCH, [])|length %}
+    {% set mittel_count = report.findings_by_severity.get(severity_enum.MITTEL, [])|length %}
+    {% set gesamt_score = report.scores.get('Gesamt', 0) %}
+    <div class="executive-summary">
+        <h3>Executive Summary</h3>
+        <p>
+        {% if kritisch_count > 0 %}
+            <strong class="bewertung-kritisch">Kritischer Handlungsbedarf:</strong>
+            Es wurden {{ kritisch_count }} kritische und {{ hoch_count }} schwerwiegende Schwachstellen identifiziert.
+            Sofortige Massnahmen sind erforderlich.
+        {% elif hoch_count > 0 %}
+            <strong class="bewertung-hoch">Handlungsbedarf:</strong>
+            Es wurden {{ hoch_count }} schwerwiegende Schwachstellen identifiziert.
+            Zeitnahe Behebung wird empfohlen.
+        {% elif mittel_count > 0 %}
+            <strong class="bewertung-mittel">Verbesserungswuerdig:</strong>
+            Es wurden {{ mittel_count }} mittelschwere Auffaelligkeiten identifiziert.
+        {% else %}
+            <strong class="bewertung-gut">Guter Zustand:</strong>
+            Keine schwerwiegenden Probleme erkannt.
+        {% endif %}
+        </p>
+        {% if kritisch_count > 0 or hoch_count > 0 %}
+        <div class="sofortmassnahmen">
+            <strong>Empfohlene Sofortmassnahmen:</strong>
+            <ul>
+            {% for f in report.all_findings[:5] %}
+                {% if f.severity.value in ['KRITISCH', 'HOCH'] and f.empfehlung %}
+                <li>{{ f.empfehlung }}</li>
+                {% endif %}
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── Severity-Verteilung (SVG Chart) ── #}
+    <div class="severity-chart">
+        <h3>Severity-Verteilung</h3>
+        {% set sev_data = [
+            ('KRITISCH', report.findings_by_severity.get(severity_enum.KRITISCH, [])|length, '#ef4444'),
+            ('HOCH', report.findings_by_severity.get(severity_enum.HOCH, [])|length, '#f97316'),
+            ('MITTEL', report.findings_by_severity.get(severity_enum.MITTEL, [])|length, '#eab308'),
+            ('NIEDRIG', report.findings_by_severity.get(severity_enum.NIEDRIG, [])|length, '#3b82f6'),
+            ('INFO', report.findings_by_severity.get(severity_enum.INFO, [])|length, '#22c55e'),
+        ] %}
+        {% set max_count = [1] %}
+        {% for _, count, _ in sev_data %}{% if count > max_count[0] %}{% if max_count.append(count) %}{% endif %}{% endif %}{% endfor %}
+        <svg viewBox="0 0 500 180" class="chart-svg">
+            {% for label, count, color in sev_data %}
+            {% set y = loop.index0 * 34 + 10 %}
+            {% set bar_width = (count / max_count[-1]) * 300 if max_count[-1] > 0 else 0 %}
+            <text x="75" y="{{ y + 16 }}" text-anchor="end" fill="#94a3b8" font-size="13">{{ label }}</text>
+            <rect x="85" y="{{ y }}" width="{{ bar_width }}" height="22" rx="4" fill="{{ color }}" opacity="0.85"/>
+            <text x="{{ 95 + bar_width }}" y="{{ y + 16 }}" fill="#e2e8f0" font-size="13" font-weight="600">{{ count }}</text>
+            {% endfor %}
+        </svg>
+    </div>
     {% endif %}
 
     {# ── Severity-Filter ── #}
@@ -98,6 +159,12 @@
                 <span class="severity-tag tag-{{ f.severity.value|lower }}">{{ f.severity.value }}</span>
                 <span class="finding-title">{{ f.titel }}</span>
             </div>
+            {% if f.cwe_id or f.owasp_category %}
+            <div class="finding-refs">
+                {% if f.cwe_id %}<span class="ref-badge cwe-badge">{{ f.cwe_id }}</span>{% endif %}
+                {% if f.owasp_category %}<span class="ref-badge owasp-badge">{{ f.owasp_category }}</span>{% endif %}
+            </div>
+            {% endif %}
             <div class="finding-desc">{{ f.beschreibung }}</div>
             {% if f.beweis %}
             <div class="finding-evidence">{{ f.beweis }}</div>

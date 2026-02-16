@@ -23,6 +23,8 @@ def generate_csv_report(report: AuditReport, output_path: Path) -> Path:
                 "beschreibung",
                 "beweis",
                 "empfehlung",
+                "cwe_id",
+                "owasp_category",
             ]
         )
         for result in report.results:
@@ -36,6 +38,8 @@ def generate_csv_report(report: AuditReport, output_path: Path) -> Path:
                         finding.beschreibung,
                         finding.beweis,
                         finding.empfehlung,
+                        finding.cwe_id,
+                        finding.owasp_category,
                     ]
                 )
 

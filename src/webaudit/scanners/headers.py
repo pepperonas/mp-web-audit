@@ -1,4 +1,4 @@
-"""Security-Headers-Scanner mit CSP-Analyse und CORS-Pruefung."""
+"""Security-Headers-Scanner mit CSP-Analyse, CORS-Pruefung und Cross-Origin Headers."""
 
 from __future__ import annotations
 
@@ -77,14 +77,56 @@ class HeadersScanner(BaseScanner):
                     )
                 )
 
+        # HSTS max-age und includeSubDomains Validierung
+        hsts_value = headers_lower.get("strict-transport-security", "")
+        if hsts_value:
+            hsts_lower = hsts_value.lower()
+            # max-age pruefen
+            import re
+
+            max_age_match = re.search(r"max-age=(\d+)", hsts_lower)
+            if max_age_match:
+                max_age = int(max_age_match.group(1))
+                if max_age < 31536000:  # < 1 Jahr
+                    findings.append(
+                        Finding(
+                            scanner=self.name,
+                            kategorie="Sicherheit",
+                            titel="HSTS max-age zu kurz",
+                            severity=Severity.NIEDRIG,
+                            beschreibung=f"HSTS max-age ist {max_age}s (empfohlen: >= 31536000 = 1 Jahr).",
+                            beweis=f"Strict-Transport-Security: {hsts_value}",
+                            empfehlung="HSTS max-age auf mindestens 31536000 (1 Jahr) setzen.",
+                        )
+                    )
+            if "includesubdomains" not in hsts_lower:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel="HSTS ohne includeSubDomains",
+                        severity=Severity.NIEDRIG,
+                        beschreibung="HSTS ist ohne includeSubDomains gesetzt. Subdomains sind nicht geschuetzt.",
+                        beweis=f"Strict-Transport-Security: {hsts_value}",
+                        empfehlung="includeSubDomains zur HSTS-Direktive hinzufuegen.",
+                    )
+                )
+
         # CSP-Staerke pruefen wenn vorhanden
         csp_value = headers_lower.get("content-security-policy", "")
         if csp_value:
             csp_lower = csp_value.lower()
             csp_issues = []
 
+            # Nonce/Hash Erkennung: unsafe-inline wird ignoriert wenn Nonce/Hash vorhanden
+            has_nonce_or_hash = (
+                "'nonce-" in csp_lower or "'sha256-" in csp_lower or "'sha384-" in csp_lower
+            )
+
             for directive in CSP_UNSAFE_DIRECTIVES:
                 if directive in csp_lower:
+                    if directive == "'unsafe-inline'" and has_nonce_or_hash:
+                        continue  # Browser ignoriert unsafe-inline bei Nonce/Hash
                     csp_issues.append(directive)
 
             # Wildcard in script-src
@@ -103,6 +145,39 @@ class HeadersScanner(BaseScanner):
                         beschreibung=f"Die Content-Security-Policy enthaelt unsichere Direktiven: {', '.join(csp_issues)}",
                         beweis=f"CSP: {csp_value[:200]}",
                         empfehlung="unsafe-inline und unsafe-eval entfernen, Nonces oder Hashes verwenden.",
+                    )
+                )
+
+            # default-src oder script-src Check
+            if "default-src" not in csp_lower and "script-src" not in csp_lower:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel="CSP ohne default-src und script-src",
+                        severity=Severity.MITTEL,
+                        beschreibung="Die CSP hat weder default-src noch script-src. Scripts koennen von beliebigen Quellen geladen werden.",
+                        beweis=f"CSP: {csp_value[:200]}",
+                        empfehlung="Mindestens default-src oder script-src in der CSP definieren.",
+                    )
+                )
+
+        # Cross-Origin Headers pruefen
+        cross_origin_headers = {
+            "cross-origin-embedder-policy": "COEP",
+            "cross-origin-opener-policy": "COOP",
+            "cross-origin-resource-policy": "CORP",
+        }
+        for header, abbrev in cross_origin_headers.items():
+            if header not in headers_lower:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Sicherheit",
+                        titel=f"{abbrev} Header fehlt",
+                        severity=Severity.NIEDRIG,
+                        beschreibung=f"Der {abbrev} ({header}) Header ist nicht gesetzt.",
+                        empfehlung=f"{header} Header setzen fuer verbesserten Cross-Origin-Schutz.",
                     )
                 )
 

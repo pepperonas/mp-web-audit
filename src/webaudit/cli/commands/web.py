@@ -34,6 +34,17 @@ def web_cmd(
     quiet: bool = typer.Option(False, "-q", "--quiet", help="Keine Terminal-Ausgabe"),
     json_stdout: bool = typer.Option(False, "--json-stdout", help="JSON-Report nach stdout"),
     weights: Optional[str] = typer.Option(None, "--weights", help="Score-Gewichtung als JSON"),
+    log_file: Optional[str] = typer.Option(None, "--log-file", help="Log-Datei Pfad"),
+    scanner_timeout: float = typer.Option(
+        60.0, "--scanner-timeout", help="Timeout pro Scanner in Sekunden"
+    ),
+    proxy: Optional[str] = typer.Option(None, "--proxy", help="HTTP/SOCKS Proxy URL"),
+    auth_header: Optional[str] = typer.Option(
+        None, "--auth-header", help="Auth-Header (z.B. 'Authorization: Bearer token')"
+    ),
+    auth_cookie: Optional[str] = typer.Option(
+        None, "--auth-cookie", help="Auth-Cookie (z.B. 'session=abc123')"
+    ),
 ) -> None:
     """Fuehrt nur Web-Checks durch (Performance, SEO, Mobile, Usability)."""
     if not quiet:
@@ -59,6 +70,11 @@ def web_cmd(
         quiet=quiet,
         json_stdout=json_stdout,
         weights=weights,
+        log_file=log_file,
+        scanner_timeout=scanner_timeout,
+        proxy=proxy,
+        auth_header=auth_header,
+        auth_cookie=auth_cookie,
     )
 
     from webaudit.orchestrator import run_audit

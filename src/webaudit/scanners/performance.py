@@ -15,6 +15,7 @@ class PerformanceScanner(BaseScanner):
 
     async def scan(self, context: ScanContext) -> ScanResult:
         findings: list[Finding] = []
+        raw: dict = {}
 
         ttfb_ms = context.response_time * 1000
         page_size_bytes = len(context.body.encode("utf-8", errors="ignore"))
@@ -161,6 +162,64 @@ class PerformanceScanner(BaseScanner):
                 )
             )
 
+        # HTTP/2 bzw. HTTP/3 Erkennung
+        alt_svc = headers_lower.get("alt-svc", "")
+        has_http2 = "h2" in alt_svc.lower() or "h3" in alt_svc.lower()
+        raw["has_http2_or_h3"] = has_http2
+        if alt_svc:
+            raw["alt_svc"] = alt_svc
+
+        # Bild-Format Check (WebP/AVIF Empfehlung)
+        if context.soup:
+            img_tags = context.soup.find_all("img", src=True)
+            legacy_images = []
+            for img in img_tags:
+                src = img.get("src", "").lower()
+                # Nur Bilder mit Legacy-Format zaehlen (nicht SVG/WebP/AVIF)
+                if any(src.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".gif", ".bmp")):
+                    legacy_images.append(img.get("src", "")[:80])
+            raw["legacy_image_count"] = len(legacy_images)
+            if len(legacy_images) > 3:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Performance",
+                        titel="Bilder ohne moderne Formate (WebP/AVIF)",
+                        severity=Severity.NIEDRIG,
+                        beschreibung=f"{len(legacy_images)} Bilder nutzen Legacy-Formate (JPEG/PNG/GIF).",
+                        beweis=", ".join(legacy_images[:5]),
+                        empfehlung="Bilder in WebP oder AVIF konvertieren fuer bessere Komprimierung.",
+                    )
+                )
+
+        # Inline-Script Minifikation Heuristik
+        if context.soup:
+            inline_scripts = context.soup.find_all("script", src=False)
+            unminified_scripts = 0
+            for script in inline_scripts:
+                content = script.string or ""
+                if len(content) > 200:
+                    lines = content.split("\n")
+                    if len(lines) > 10:
+                        # Viele Zeilen mit Einrueckung = wahrscheinlich unminifiziert
+                        indented = sum(
+                            1 for line in lines if line.startswith("  ") or line.startswith("\t")
+                        )
+                        if indented > len(lines) * 0.3:
+                            unminified_scripts += 1
+            raw["unminified_inline_scripts"] = unminified_scripts
+            if unminified_scripts > 0:
+                findings.append(
+                    Finding(
+                        scanner=self.name,
+                        kategorie="Performance",
+                        titel=f"{unminified_scripts} unminifizierte(s) Inline-Script(s)",
+                        severity=Severity.NIEDRIG,
+                        beschreibung=f"{unminified_scripts} Inline-Scripts scheinen nicht minifiziert zu sein.",
+                        empfehlung="Inline-Scripts minifizieren um die Seitengroesse zu reduzieren.",
+                    )
+                )
+
         # Render-blockierende Ressourcen
         if render_blocking_scripts > 2:
             findings.append(
@@ -187,11 +246,8 @@ class PerformanceScanner(BaseScanner):
                 )
             )
 
-        return ScanResult(
-            scanner_name=self.name,
-            kategorie="Performance",
-            findings=findings,
-            raw_data={
+        raw.update(
+            {
                 "ttfb_ms": round(ttfb_ms, 1),
                 "page_size_kb": round(page_size_kb, 1),
                 "page_size_bytes": page_size_bytes,
@@ -201,5 +257,12 @@ class PerformanceScanner(BaseScanner):
                 "has_compression": has_compression,
                 "content_encoding": content_encoding,
                 "render_blocking_scripts": render_blocking_scripts,
-            },
+            }
+        )
+
+        return ScanResult(
+            scanner_name=self.name,
+            kategorie="Performance",
+            findings=findings,
+            raw_data=raw,
         )

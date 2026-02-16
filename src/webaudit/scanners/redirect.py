@@ -114,6 +114,73 @@ class RedirectScanner(BaseScanner):
         except httpx.HTTPError:
             raw["www_consistent"] = None
 
+        # Status-Code Unterscheidung: 302 statt 301 fuer permanente Redirects
+        if parsed.scheme == "https":
+            try:
+                check_resp = await self.http.get(
+                    http_url,  # type: ignore[possibly-undefined]
+                )
+                if check_resp.history:
+                    for hist_resp in check_resp.history:
+                        if hist_resp.status_code == 302:
+                            raw["uses_302_for_https_redirect"] = True
+                            findings.append(
+                                Finding(
+                                    scanner=self.name,
+                                    kategorie="Sicherheit",
+                                    titel="HTTP->HTTPS nutzt 302 statt 301",
+                                    severity=Severity.NIEDRIG,
+                                    beschreibung="Der HTTP->HTTPS Redirect nutzt 302 (temporaer) statt 301 (permanent).",
+                                    beweis=f"Status-Code: {hist_resp.status_code}",
+                                    empfehlung="301 Redirect verwenden fuer permanente HTTP->HTTPS Umleitung.",
+                                )
+                            )
+                            break
+            except (httpx.HTTPError, NameError):
+                pass
+
+        # Open Redirect Test
+        open_redirect_params = ["url", "redirect", "next", "goto", "return", "returnTo", "redir"]
+        base = context.target_url.rstrip("/")
+        for param in open_redirect_params:
+            test_url = f"{base}?{param}=//evil.com"
+            try:
+                resp = await self.http.get(test_url)
+                final = str(resp.url)
+                if "evil.com" in final:
+                    raw["open_redirect_vulnerable"] = True
+                    findings.append(
+                        Finding(
+                            scanner=self.name,
+                            kategorie="Sicherheit",
+                            titel=f"Open Redirect ueber Parameter '{param}'",
+                            severity=Severity.HOCH,
+                            beschreibung=f"Der Parameter '{param}' ermoeglicht einen Open Redirect zu externen Seiten.",
+                            beweis=f"{test_url} -> {final}",
+                            empfehlung="Redirect-Ziele validieren und nur interne URLs erlauben.",
+                        )
+                    )
+                    break
+                # Check if reflected in response body (Location header)
+                for hist in resp.history:
+                    location = hist.headers.get("location", "")
+                    if "evil.com" in location:
+                        raw["open_redirect_vulnerable"] = True
+                        findings.append(
+                            Finding(
+                                scanner=self.name,
+                                kategorie="Sicherheit",
+                                titel=f"Open Redirect ueber Parameter '{param}'",
+                                severity=Severity.HOCH,
+                                beschreibung=f"Der Parameter '{param}' wird im Location-Header reflektiert.",
+                                beweis=f"Location: {location[:200]}",
+                                empfehlung="Redirect-Ziele validieren und nur interne URLs erlauben.",
+                            )
+                        )
+                        break
+            except httpx.HTTPError:
+                continue
+
         # Redirect-Ketten-Laenge
         redirect_count = len(context.redirects)
         raw["redirect_chain_length"] = redirect_count

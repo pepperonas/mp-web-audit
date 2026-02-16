@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import datetime
 from urllib.parse import urlparse
@@ -27,8 +28,10 @@ from webaudit.core.utils import normalize_url, timer
 from webaudit.reporting.engine import generate_reports
 from webaudit.scanners import discover_scanners, get_scanner_registry
 
+logger = logging.getLogger("webaudit")
+
 # Scanner die ohne initiale HTTP-Response arbeiten koennen
-NO_HTTP_SCANNERS = {"dns", "ports", "redirect"}
+NO_HTTP_SCANNERS = {"dns", "ports", "redirect", "subdomain"}
 
 
 async def _run_scanner(
@@ -60,7 +63,7 @@ async def _run_scanner(
     try:
         await scanner.setup()
         with timer() as t:
-            result = await scanner.scan(context)
+            result = await asyncio.wait_for(scanner.scan(context), timeout=config.scanner_timeout)
         result.dauer = t["elapsed"]
 
         status = "[green]OK[/green]" if result.success else f"[red]Fehler: {result.error}[/red]"
@@ -70,7 +73,20 @@ async def _run_scanner(
             description=f"{scanner_name}: {status} ({findings_count} Findings, {t['elapsed']:.1f}s)",
         )
         return result
+    except asyncio.TimeoutError:
+        logger.warning("Scanner %s: Timeout nach %.0fs", scanner_name, config.scanner_timeout)
+        progress.update(
+            task,
+            description=f"[red]{scanner_name}: Timeout nach {config.scanner_timeout:.0f}s[/red]",
+        )
+        return ScanResult(
+            scanner_name=scanner_name,
+            kategorie=scanner_cls.category,
+            success=False,
+            error=f"Timeout nach {config.scanner_timeout:.0f}s",
+        )
     except Exception as e:
+        logger.error("Scanner %s fehlgeschlagen: %s", scanner_name, e, exc_info=True)
         progress.update(task, description=f"[red]{scanner_name}: {e}[/red]")
         return ScanResult(
             scanner_name=scanner_name,
@@ -81,8 +97,8 @@ async def _run_scanner(
     finally:
         try:
             await scanner.teardown()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Teardown %s: %s", scanner_name, e)
         progress.remove_task(task)
 
 
@@ -199,11 +215,9 @@ async def run_audit(
             results = [t.result() for t in tasks]
             report.results = results
 
-    # Scores berechnen
-    report.scores = calculate_scores(report, custom_weights=config.scoring_weights)
     report.dauer = round(time.monotonic() - start_time, 1)
 
-    # Metadaten setzen
+    # Metadaten setzen (vor Scoring, damit scanner_scores gespeichert werden)
     import platform
 
     report.metadata = ScanMetadata(
@@ -213,8 +227,20 @@ async def run_audit(
             "categories": config.categories,
             "timeout": config.timeout,
             "rate_limit": config.rate_limit,
+            "scanner_timeout": config.scanner_timeout,
+            "proxy": config.proxy_url or "none",
         },
     )
+
+    # Scores berechnen
+    report.scores = calculate_scores(report, custom_weights=config.scoring_weights)
+
+    # CWE/OWASP-Referenzen anreichern
+    from webaudit.core.references import enrich_finding
+
+    for result in report.results:
+        for finding in result.findings:
+            enrich_finding(finding)
 
     # Reports generieren
     if config.json_stdout:
@@ -251,11 +277,16 @@ async def _try_connect(
     parsed = urlparse(target_url)
     hostname = parsed.hostname or ""
 
+    # Proxy-Kwargs fuer Fallback-Clients
+    proxy_kwargs: dict = {}
+    if config.proxy_url:
+        proxy_kwargs["proxy"] = config.proxy_url
+
     # Strategie 1: Original-URL
     try:
         return await http.get(target_url)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Strategie 1 (Original-URL): %s", e)
 
     # Strategie 2: SSL-Verifizierung deaktivieren (self-signed certs)
     if parsed.scheme == "https" and config.verify_ssl:
@@ -267,6 +298,7 @@ async def _try_connect(
                 follow_redirects=True,
                 verify=False,
                 headers={"User-Agent": config.user_agent},
+                **proxy_kwargs,
             ) as client:
                 resp = await client.get(target_url)
                 if not config.quiet:
@@ -274,8 +306,8 @@ async def _try_connect(
                         "[yellow]  Verbindung nur ohne SSL-Verifizierung moeglich.[/yellow]"
                     )
                 return resp
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Strategie 2 (ohne SSL-Verify): %s", e)
 
     # Strategie 3: Anderes Protokoll (https->http oder http->https)
     if parsed.scheme == "https":
@@ -290,13 +322,14 @@ async def _try_connect(
             follow_redirects=True,
             verify=False,
             headers={"User-Agent": config.user_agent},
+            **proxy_kwargs,
         ) as client:
             resp = await client.get(alt_url)
             if not config.quiet:
                 console.print(f"[yellow]  Erreichbar ueber {alt_url}[/yellow]")
             return resp
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Strategie 3 (Alt-Protokoll %s): %s", alt_url, e)
 
     # Strategie 4: Alternative Ports (8080, 8443)
     alt_ports = [8443, 8080] if parsed.scheme == "https" else [8080, 8443]
@@ -310,13 +343,14 @@ async def _try_connect(
                 follow_redirects=True,
                 verify=False,
                 headers={"User-Agent": config.user_agent},
+                **proxy_kwargs,
             ) as client:
                 resp = await client.get(alt)
                 if not config.quiet:
                     console.print(f"[yellow]  Erreichbar ueber Port {port}[/yellow]")
                 return resp
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Strategie 4 (Port %d): %s", port, e)
 
     # Alle Strategien fehlgeschlagen
     if not config.quiet:
