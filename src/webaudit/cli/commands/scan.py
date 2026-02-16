@@ -17,6 +17,15 @@ from webaudit.core.exceptions import AuthorizationError
 console = Console()
 
 
+BANNER = r"""
+ ____                              _                            _
+|  _ \  ___  _ __  _ __   ___ _ __| | ___   _ _ __  _ __   ___| |
+| | | |/ _ \| '_ \| '_ \ / _ \ '__| |/ / | | | '_ \| '_ \ / _ \ |
+| |_| | (_) | | | | | | |  __/ |  |   <| |_| | |_) | |_) |  __/ |
+|____/ \___/|_| |_|_| |_|\___|_|  |_|\_\\__,_| .__/| .__/ \___|_|
+                                              |_|   |_|"""
+
+
 def _show_authorization_prompt(
     url: str,
     scan_typ: str,
@@ -24,6 +33,10 @@ def _show_authorization_prompt(
     discovery: bool = True,
 ) -> datetime:
     """Zeigt den Autorisierungs-Disclaimer und gibt den Zeitstempel zurueck."""
+    from webaudit import __version__
+
+    console.print(f"[bold cyan]{BANNER}[/bold cyan] [dim]v{__version__}[/dim]\n")
+
     info_lines = [
         "[bold red]WARNUNG: Dieses Tool fuehrt aktive Sicherheits-[/bold red]",
         "[bold red]pruefungen durch. Die Nutzung ohne ausdrueckliche[/bold red]",
@@ -34,7 +47,6 @@ def _show_authorization_prompt(
         f"Port-Scan: [cyan]{'Ja' if port_scan else 'Nein'}[/cyan]",
         f"Directory-Discovery: [cyan]{'Ja' if discovery else 'Nein'}[/cyan]",
     ]
-    console.print()
     console.print(Panel("\n".join(info_lines), border_style="red"))
 
     antwort = typer.prompt(
