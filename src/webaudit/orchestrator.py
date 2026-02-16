@@ -286,7 +286,7 @@ async def _try_connect(
     try:
         return await http.get(target_url)
     except Exception as e:
-        logger.warning("Strategie 1 (Original-URL): %s", e)
+        logger.info("Strategie 1 (Original-URL): %s", e)
 
     # Strategie 2: SSL-Verifizierung deaktivieren (self-signed certs)
     if parsed.scheme == "https" and config.verify_ssl:
@@ -307,7 +307,7 @@ async def _try_connect(
                     )
                 return resp
         except Exception as e:
-            logger.warning("Strategie 2 (ohne SSL-Verify): %s", e)
+            logger.info("Strategie 2 (ohne SSL-Verify): %s", e)
 
     # Strategie 3: Anderes Protokoll (https->http oder http->https)
     if parsed.scheme == "https":
@@ -329,7 +329,7 @@ async def _try_connect(
                 console.print(f"[yellow]  Erreichbar ueber {alt_url}[/yellow]")
             return resp
     except Exception as e:
-        logger.warning("Strategie 3 (Alt-Protokoll %s): %s", alt_url, e)
+        logger.info("Strategie 3 (Alt-Protokoll %s): %s", alt_url, e)
 
     # Strategie 4: Alternative Ports (8080, 8443)
     alt_ports = [8443, 8080] if parsed.scheme == "https" else [8080, 8443]
@@ -350,7 +350,7 @@ async def _try_connect(
                     console.print(f"[yellow]  Erreichbar ueber Port {port}[/yellow]")
                 return resp
         except Exception as e:
-            logger.warning("Strategie 4 (Port %d): %s", port, e)
+            logger.info("Strategie 4 (Port %d): %s", port, e)
 
     # Alle Strategien fehlgeschlagen
     if not config.quiet:
