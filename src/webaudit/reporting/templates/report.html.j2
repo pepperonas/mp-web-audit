@@ -27,6 +27,7 @@
         <h2>Inhalt</h2>
         <ul>
             {% if report.scores %}<li><a href="#scores">Bewertung</a></li>{% endif %}
+            {% if radar_polygon %}<li><a href="#radar">Kategorie-Radar</a></li>{% endif %}
             <li><a href="#summary">Zusammenfassung</a></li>
             {% set toc_categories = [] %}
             {% for result in report.results if result.findings %}
@@ -35,6 +36,9 @@
             <li><a href="#cat-{{ result.kategorie|lower|replace(' ', '-') }}">{{ result.kategorie }}</a></li>
             {% endif %}
             {% endfor %}
+            {% if seo_checks %}<li><a href="#seo-details">SEO-Details</a></li>{% endif %}
+            {% if perf_metrics %}<li><a href="#perf-details">Performance-Details</a></li>{% endif %}
+            {% if improvements %}<li><a href="#improvements">Verbesserungsvorschlaege</a></li>{% endif %}
         </ul>
     </nav>
 
@@ -57,6 +61,36 @@
             <div class="score-bar"><div class="score-bar-fill {{ bar_color_class(score) }}" style="width:{{ score }}%"></div></div>
         </div>
         {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Radar-Chart ── #}
+    {% if radar_polygon %}
+    <div class="chart-card" id="radar">
+        <h2>Kategorie-Radar</h2>
+        <svg viewBox="0 0 400 400" class="radar-svg">
+            {# Grid-Ringe #}
+            {% for ring in radar_grid_rings %}
+            <polygon points="{% for p in ring %}{{ p.x }},{{ p.y }}{% if not loop.last %} {% endif %}{% endfor %}"
+                     fill="none" stroke="#334155" stroke-width="1" opacity="0.5"/>
+            {% endfor %}
+            {# Achsenlinien #}
+            {% for p in radar_axes %}
+            <line x1="200" y1="200" x2="{{ p.x }}" y2="{{ p.y }}" stroke="#334155" stroke-width="1" opacity="0.4"/>
+            {% endfor %}
+            {# Score-Polygon #}
+            <polygon points="{% for p in radar_polygon %}{{ p.x }},{{ p.y }}{% if not loop.last %} {% endif %}{% endfor %}"
+                     fill="rgba(59,130,246,0.25)" stroke="#3b82f6" stroke-width="2"/>
+            {# Punkte #}
+            {% for p in radar_polygon %}
+            <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4" fill="#3b82f6"/>
+            {% endfor %}
+            {# Labels #}
+            {% for lbl in radar_labels %}
+            <text x="{{ lbl.x }}" y="{{ lbl.y }}" text-anchor="{{ lbl.anchor }}" fill="#e2e8f0" font-size="12" font-weight="600">{{ lbl.label }}</text>
+            <text x="{{ lbl.x }}" y="{{ lbl.y + 14 }}" text-anchor="{{ lbl.anchor }}" fill="#94a3b8" font-size="11">{{ "%.0f"|format(lbl.score) }}%</text>
+            {% endfor %}
+        </svg>
     </div>
     {% endif %}
 
@@ -179,6 +213,92 @@
     {% endif %}
     {% endfor %}
 
+    {# ── SEO-Dashboard ── #}
+    {% if seo_checks %}
+    <div class="dashboard-card" id="seo-details">
+        <div class="dashboard-header">
+            <h2>SEO-Details</h2>
+            <div class="dashboard-big-number {{ 'score-green' if seo_pass_count >= 8 else ('score-yellow' if seo_pass_count >= 5 else 'score-red') }}">
+                {{ seo_pass_count }}/{{ seo_checks|length }}
+            </div>
+        </div>
+        <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:0.5rem;">Bestandene SEO-Checks</p>
+
+        <div class="checklist-grid">
+            {% for check in seo_checks %}
+            <div class="check-item {{ 'check-pass' if check.passed else 'check-fail' }}">
+                <span class="check-icon">{{ '&#10003;' if check.passed else '&#10007;' }}</span>
+                <span>{{ check.label }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        {# SEO Bar Chart #}
+        <svg viewBox="0 0 500 {{ seo_checks|length * 28 + 10 }}" class="chart-svg" style="margin-top:1rem;">
+            {% for check in seo_checks %}
+            {% set y = loop.index0 * 28 + 5 %}
+            <text x="110" y="{{ y + 14 }}" text-anchor="end" fill="#94a3b8" font-size="11">{{ check.label }}</text>
+            <rect x="120" y="{{ y }}" width="300" height="20" rx="4"
+                  fill="{{ '#22c55e' if check.passed else '#ef4444' }}" opacity="{{ '0.7' if check.passed else '0.4' }}"/>
+            <text x="130" y="{{ y + 14 }}" fill="#fff" font-size="11" font-weight="600">{{ 'Bestanden' if check.passed else 'Fehlt' }}</text>
+            {% endfor %}
+        </svg>
+    </div>
+    {% endif %}
+
+    {# ── Performance-Dashboard ── #}
+    {% if perf_metrics %}
+    <div class="dashboard-card" id="perf-details">
+        <h2>Performance-Details</h2>
+
+        <div class="metric-grid">
+            <div class="metric-tile metric-{{ perf_metrics.ttfb_rating }}">
+                <span class="metric-value">{{ "%.0f"|format(perf_metrics.ttfb_ms) }}</span>
+                <span class="metric-label">TTFB (ms)</span>
+                <span class="metric-target">Ziel: &lt; 200ms</span>
+            </div>
+            <div class="metric-tile metric-{{ perf_metrics.size_rating }}">
+                <span class="metric-value">{{ "%.0f"|format(perf_metrics.page_size_kb) }}</span>
+                <span class="metric-label">Seitengroesse (KB)</span>
+                <span class="metric-target">Ziel: &lt; 500 KB</span>
+            </div>
+            <div class="metric-tile metric-{{ 'gut' if perf_metrics.redirect_count == 0 else ('mittel' if perf_metrics.redirect_count <= 2 else 'schlecht') }}">
+                <span class="metric-value">{{ perf_metrics.redirect_count }}</span>
+                <span class="metric-label">Redirects</span>
+                <span class="metric-target">Ziel: 0</span>
+            </div>
+            <div class="metric-tile metric-{{ 'gut' if perf_metrics.has_compression else 'schlecht' }}">
+                <span class="metric-value">{{ 'Ja' if perf_metrics.has_compression else 'Nein' }}</span>
+                <span class="metric-label">Komprimierung</span>
+                <span class="metric-target">{{ perf_metrics.content_encoding if perf_metrics.content_encoding else 'Keine' }}</span>
+            </div>
+            <div class="metric-tile metric-{{ 'gut' if perf_metrics.render_blocking_scripts == 0 else 'schlecht' }}">
+                <span class="metric-value">{{ perf_metrics.render_blocking_scripts }}</span>
+                <span class="metric-label">Blockierende Scripts</span>
+                <span class="metric-target">Ziel: 0</span>
+            </div>
+            <div class="metric-tile metric-{{ 'gut' if perf_metrics.has_http2_or_h3 else 'mittel' }}">
+                <span class="metric-value">{{ 'Ja' if perf_metrics.has_http2_or_h3 else 'Nein' }}</span>
+                <span class="metric-label">HTTP/2+</span>
+                <span class="metric-target">Empfohlen</span>
+            </div>
+        </div>
+
+        {# TTFB-Balken mit Schwellenwert-Markern #}
+        {% set ttfb_max = 1000 %}
+        {% set ttfb_pct = [perf_metrics.ttfb_ms / ttfb_max * 100, 100] | min %}
+        <h3 style="margin-top:1.2rem;">TTFB-Bewertung</h3>
+        <div class="ttfb-bar-container">
+            <div class="ttfb-bar-fill" style="width:{{ ttfb_pct }}%;background:{{ '#22c55e' if perf_metrics.ttfb_ms <= 200 else ('#eab308' if perf_metrics.ttfb_ms <= 500 else '#ef4444') }};"></div>
+        </div>
+        <div class="ttfb-markers">
+            <span class="ttfb-marker" style="left:20%;color:var(--green);">200ms</span>
+            <span class="ttfb-marker" style="left:50%;color:var(--yellow);">500ms</span>
+            <span class="ttfb-marker" style="left:100%;color:var(--red);">1000ms</span>
+        </div>
+    </div>
+    {% endif %}
+
     {# ── Scanner-Fehler ── #}
     {% set errors = report.results|selectattr('success', 'false')|list %}
     {% if errors %}
@@ -191,6 +311,28 @@
                 <span class="finding-title">{{ r.scanner_name }}</span>
             </div>
             <div class="finding-desc">{{ r.error }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Verbesserungsvorschlaege ── #}
+    {% if improvements %}
+    <div class="improvements-card" id="improvements">
+        <h2>Verbesserungsvorschlaege</h2>
+        {% set priority_order = ['Sofort', 'Kurzfristig', 'Mittelfristig'] %}
+        {% for cat, items in improvements.items() %}
+        <div class="improvement-category">
+            <h3>{{ cat }}</h3>
+            {% for prio in priority_order %}
+            {% for item in items if item.prioritaet == prio %}
+            <div class="improvement-item">
+                <span class="priority-badge priority-{{ item.prioritaet|lower }}">{{ item.prioritaet }}</span>
+                <span class="impact-badge">{{ item.auswirkung }}</span>
+                <span>{{ item.text }}</span>
+            </div>
+            {% endfor %}
+            {% endfor %}
         </div>
         {% endfor %}
     </div>

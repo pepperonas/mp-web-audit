@@ -3,7 +3,7 @@
 [![CI](https://github.com/pepperonas/mp-web-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/pepperonas/mp-web-audit/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.11-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/pepperonas/mp-web-audit)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/pepperonas/mp-web-audit)
 
 CLI-basiertes Web-Auditing-Framework fuer genehmigte Sicherheitspruefungen.
 
@@ -39,7 +39,7 @@ CLI-basiertes Web-Auditing-Framework fuer genehmigte Sicherheitspruefungen.
 - **Proxy-Support** und **Auth-Support** (Header/Cookie) fuer interne Systeme
 - **HTTP-Retry** mit exponentiellem Backoff bei Timeout/429/502/503
 - **CI/CD-tauglich**: `--fail-on`, `--quiet`, `--json-stdout` fuer Pipeline-Integration
-- **4 Report-Formate**: HTML (mit Executive Summary und SVG-Charts), JSON, CSV, Terminal
+- **4 Report-Formate**: HTML (mit Radar-Chart, SEO/Performance-Dashboards, Verbesserungsvorschlaegen und SVG-Charts), JSON, CSV, Terminal
 - **Konfigurierbare Score-Gewichtung** via `--weights`
 - **Rate-Limiting** via Token-Bucket-Algorithmus
 - **Plugin-System** mit Decorator-basierter Scanner-Registrierung
@@ -107,7 +107,7 @@ Nach der Aktivierung erscheint `(.venv)` im Terminal-Prompt. Der Befehl `webaudi
 
 ```bash
 (.venv) $ webaudit --version
-mp-web-audit v0.4.0
+mp-web-audit v0.5.0
 ```
 
 Zum Deaktivieren:
@@ -175,7 +175,7 @@ webaudit report reports/audit_example.com_20260216.json
 ### Beispiel-Ausgabe
 
 ```
-mp-web-audit v0.4.0
+mp-web-audit v0.5.0
 
 Lade Ziel: https://example.com/ (93.184.216.34)
 Geladen: Status 200, 1256 Bytes, 85ms TTFB
@@ -322,7 +322,7 @@ webaudit scan https://example.com --weights '{"Sicherheit": 0.6, "Performance": 
 |--------|-------------|---------|
 | `-t, --timeout FLOAT` | HTTP-Timeout in Sekunden | `10.0` |
 | `--rate-limit INT` | Max. Requests pro Sekunde | `10` |
-| `--user-agent TEXT` | Custom User-Agent | `mp-web-audit/0.4.0` |
+| `--user-agent TEXT` | Custom User-Agent | `mp-web-audit/0.5.0` |
 | `--no-verify-ssl` | SSL-Verifizierung deaktivieren | - |
 | `--proxy TEXT` | HTTP/HTTPS-Proxy (z.B. `http://127.0.0.1:8080`) | - |
 | `--auth-header TEXT` | Authorization-Header (z.B. `Bearer token123`) | - |
@@ -398,6 +398,10 @@ webaudit scan https://example.com --weights '{"Sicherheit": 0.7, "Performance": 
 
 Portable Single-File-Reports mit eingebettetem CSS und JavaScript:
 - **Executive Summary** mit Gesamt-Bewertung und empfohlenen Sofortmassnahmen
+- **SVG-Radar-Chart** mit 6-Achsen-Kategorie-Uebersicht (Sicherheit, Performance, SEO, Mobile, Usability, Techstack)
+- **SEO-Dashboard** mit 10-Punkte-Checklist (Title, Meta-Description, H1, Canonical, Lang, OG, Structured Data, robots.txt, Sitemap, hreflang) und SVG-Balkenchart
+- **Performance-Dashboard** mit 6 Metriken-Tiles (TTFB, Seitengroesse, Redirects, Komprimierung, Blockierende Scripts, HTTP/2) und TTFB-Schwellenwert-Balken
+- **Priorisierte Verbesserungsvorschlaege** gruppiert nach Kategorie mit Prioritaet (Sofort/Kurzfristig/Mittelfristig) und Auswirkung (Hoch/Mittel/Niedrig)
 - **SVG-Severity-Chart** mit Verteilung der Findings nach Schweregrad
 - Farbcodierte Score-Uebersicht mit Gesamt- und Kategorie-Scores
 - Inhaltsverzeichnis mit Anker-Links zu jeder Kategorie
@@ -422,7 +426,7 @@ Strukturierte Datenexporte mit CWE/OWASP-Referenzen fuer Weiterverarbeitung und 
     "Performance": 82.0
   },
   "metadata": {
-    "tool_version": "0.4.0",
+    "tool_version": "0.5.0",
     "python_version": "3.11.8",
     "scan_config": {
       "categories": ["web", "security", "techstack", "discovery"],
@@ -621,7 +625,7 @@ pip install -e ".[dev]"
 ### Tests
 
 ```bash
-pytest                                    # Alle Tests (120 Tests)
+pytest                                    # Alle Tests (134 Tests)
 pytest -v                                 # Verbose
 pytest tests/scanners/test_headers.py     # Einzelne Datei
 pytest -k "test_missing"                  # Pattern-Match

@@ -278,6 +278,179 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
     border: 1px solid rgba(59,130,246,0.3);
 }
 
+/* Radar Chart */
+.chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+.chart-card h2 { text-align: left; }
+.radar-svg {
+    max-width: 400px;
+    width: 100%;
+    height: auto;
+    margin: 0 auto;
+    display: block;
+}
+
+/* Metric Grid (Performance + SEO Dashboards) */
+.dashboard-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+.dashboard-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+.dashboard-big-number {
+    font-size: 2rem;
+    font-weight: 800;
+}
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+}
+.metric-tile {
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+.metric-tile .metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    display: block;
+}
+.metric-tile .metric-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 0.2rem;
+}
+.metric-tile .metric-target {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    opacity: 0.7;
+    display: block;
+    margin-top: 0.15rem;
+}
+.metric-gut .metric-value { color: var(--green); }
+.metric-mittel .metric-value { color: var(--yellow); }
+.metric-schlecht .metric-value { color: var(--red); }
+.metric-neutral .metric-value { color: var(--text); }
+
+/* SEO Checklist */
+.checklist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+.check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    background: rgba(0,0,0,0.15);
+}
+.check-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+    width: 1.2rem;
+    text-align: center;
+}
+.check-pass .check-icon { color: var(--green); }
+.check-fail .check-icon { color: var(--red); }
+.check-fail { opacity: 0.75; }
+
+/* TTFB Bar */
+.ttfb-bar-container {
+    margin-top: 1rem;
+    position: relative;
+    height: 30px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 6px;
+    overflow: visible;
+}
+.ttfb-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.5s;
+}
+.ttfb-markers {
+    position: relative;
+    height: 18px;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+.ttfb-marker {
+    position: absolute;
+    transform: translateX(-50%);
+}
+
+/* Improvements */
+.improvements-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+.improvement-category {
+    margin-bottom: 1.2rem;
+}
+.improvement-category:last-child { margin-bottom: 0; }
+.improvement-category h3 {
+    font-size: 1rem;
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+}
+.improvement-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.5rem 0;
+    font-size: 0.9rem;
+}
+.improvement-item + .improvement-item {
+    border-top: 1px solid rgba(51,65,85,0.5);
+}
+.priority-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.priority-sofort { background: rgba(239,68,68,0.2); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.priority-kurzfristig { background: rgba(234,179,8,0.2); color: var(--yellow); border: 1px solid rgba(234,179,8,0.3); }
+.priority-mittelfristig { background: rgba(59,130,246,0.2); color: var(--accent-light); border: 1px solid rgba(59,130,246,0.3); }
+.impact-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+    color: var(--text-muted);
+}
+
 /* Footer */
 .footer {
     text-align: center;
@@ -290,7 +463,9 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
 @media print {
     body { background: #fff; color: #000; padding: 0; }
     .container { max-width: 100%; }
-    .header, .score-card, .section, .toc { border-color: #ccc; background: #fff; }
+    .header, .score-card, .section, .toc, .chart-card, .dashboard-card, .improvements-card {
+        border-color: #ccc; background: #fff;
+    }
     .score-value, h2 { color: #000 !important; }
     .finding { background: #f9f9f9; }
     .finding-evidence { background: #eee; color: #333; }
@@ -299,4 +474,8 @@ h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
     .score-bar-fill { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     .severity-tag { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     .summary-badge { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .metric-tile { background: #f5f5f5; }
+    .check-pass .check-icon { color: #1a7f37; }
+    .check-fail .check-icon { color: #dc2626; }
+    .priority-badge, .impact-badge { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
